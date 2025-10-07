@@ -1,0 +1,130 @@
+
+You are an expert full-stack developer using Windsurf to build a production-ready Next.js 15 web application.
+
+I want you to build a complete working application called **GTMD** (GitHub Test Management Dashboard) based on the following project plan and user stories.
+
+----------------------------------------------------------------
+PROJECT OVERVIEW
+----------------------------------------------------------------
+GTMD is a lightweight Jira-like dashboard that integrates directly with GitHub for:
+- Story Management — Display GitHub Issues as stories (Kanban view, filtering).
+- Test Case Management — Display, create, and review test cases stored as Markdown files in a separate GitHub repository.
+- Defect Management — Create and manage defects by opening GitHub issues with a `bug` label.
+- Dashboard & Reporting — Show coverage, defect trends, and traceability.
+- Collaboration — Peer review of test cases via PRs.
+GitHub acts as the source of truth for all data (no separate DB).
+
+----------------------------------------------------------------
+TECH STACK
+----------------------------------------------------------------
+- Frontend: Next.js 15 (App Router), React, TypeScript, Tailwind CSS
+- Backend: Next.js API Routes (serverless)
+- Auth: GitHub OAuth via NextAuth.js v5
+- Integration: GitHub REST & GraphQL APIs
+- Storage: GitHub repositories (1 for Stories/Defects, 1 for Test Cases)
+- Hosting: Vercel
+
+----------------------------------------------------------------
+EXPECTED FOLDER STRUCTURE
+----------------------------------------------------------------
+gtmd/
+ ├─ app/
+ │   ├─ api/
+ │   │   ├─ auth/[...nextauth]/route.ts
+ │   │   └─ github/
+ │   │       ├─ testcases/route.ts
+ │   │       ├─ issues/route.ts
+ │   │       ├─ me/route.ts
+ │   │       └─ rate/route.ts
+ │   ├─ dashboard/page.tsx
+ │   ├─ stories/page.tsx
+ │   ├─ testcases/page.tsx
+ │   ├─ defects/page.tsx
+ │   └─ layout.tsx
+ ├─ components/
+ ├─ lib/
+ │   └─ auth.ts
+ ├─ public/
+ ├─ styles/
+ ├─ .env.local (not committed)
+ ├─ package.json
+ └─ tailwind.config.ts
+
+----------------------------------------------------------------
+ENVIRONMENT VARIABLES (must be used)
+----------------------------------------------------------------
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=<random-string>
+GITHUB_ID=<github-oauth-client-id>
+GITHUB_SECRET=<github-oauth-client-secret>
+STORIES_REPO=<owner/live-project>
+TESTCASES_REPO=<owner/qa-testcases>
+
+NOTE: Replace <owner/...> with actual repo names. OAuth callback must be:
+http://localhost:3000/api/auth/callback/github
+
+----------------------------------------------------------------
+USER STORIES & FEATURES (Implement All)
+----------------------------------------------------------------
+AUTHENTICATION & ONBOARDING
+- GitHub OAuth via NextAuth v5; session includes `accessToken`.
+- Unauthenticated users are redirected to login.
+
+STORY MANAGEMENT
+- Display GitHub Issues from STORIES_REPO in Kanban/list view.
+- Columns: Backlog / In Progress / Done.
+- Filters: label, milestone, assignee.
+- Story detail pane shows linked test cases (by referencing story ID inside test case frontmatter/body).
+
+TEST CASE MANAGEMENT
+- Fetch .md files from qa-testcases/manual via GitHub API.
+- Left panel lists files; right panel renders Markdown.
+- Create new test case via form:
+  - Fields: Title, Story ID, Steps, Expected, Priority, Suite.
+  - Create a branch + commit a new .md file via GitHub API + open PR for review.
+- Peer review support: show PR review status (Draft → Review → Approved).
+
+DEFECT MANAGEMENT
+- Create defects via form → create GitHub issue in STORIES_REPO with `bug` label.
+- Fields: Title, Description, Severity, Priority, Story ID, Test Case ID.
+- List defects with filters (severity, status, assignee).
+
+DASHBOARD & REPORTING
+- Coverage report: % stories with linked test cases (list unlinked).
+- Defect trend chart: defects by severity over time.
+- Export coverage/defect tables to CSV (and basic PDF if trivial).
+
+----------------------------------------------------------------
+ACCEPTANCE CRITERIA (All must pass)
+----------------------------------------------------------------
+1) GitHub OAuth login works end-to-end.
+2) Stories page lists issues and supports filtering.
+3) Testcases page lists .md files and renders markdown.
+4) Test case creation flow creates a PR successfully.
+5) Defects page logs bugs as GitHub issues and lists them with filters.
+6) Dashboard shows coverage metrics and a trend chart.
+7) Environment variables are respected; app runs with `npm run dev`.
+8) TypeScript is used throughout; clean modular code.
+9) Proper error handling in API routes and UI.
+
+----------------------------------------------------------------
+STYLE & DELIVERY GUIDELINES
+----------------------------------------------------------------
+- Use TypeScript everywhere (avoid `any`).
+- Build reusable components; keep UI minimal with Tailwind.
+- Prefer server components; use client components only when needed.
+- No external DB or client-side state libraries.
+- All GitHub calls use the authenticated user’s token.
+- Organize helper functions in lib/github.ts (REST + GraphQL helpers).
+- Include helpful comments and clear naming conventions.
+
+----------------------------------------------------------------
+BUILD INSTRUCTIONS
+----------------------------------------------------------------
+Using the above, build the entire GTMD project. Start with scaffolding pages and API routes, then implement functionality incrementally until all acceptance criteria are met.
+Verify the app launches locally with `npm install && npm run dev`, and that pages render without runtime errors when environment variables are provided.
+
+OPTIONAL EXTRAS (if time allows)
+- Role-based permissions (Admin / Tester / QA Lead).
+- AI test case suggestion stub endpoint.
+- Slack/Discord webhook for defect triage notifications.
