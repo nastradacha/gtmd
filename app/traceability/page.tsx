@@ -140,6 +140,138 @@ export default function TraceabilityPage() {
     setExpanded((prev) => ({ ...prev, [num]: !prev[num] }));
   }
 
+  function csvEscape(val: any): string {
+    if (val === null || val === undefined) return "";
+    let s = String(val);
+    if (s.includes('"')) s = s.replace(/"/g, '""');
+    if (/[",\n]/.test(s)) return `"${s}"`;
+    return s;
+  }
+
+  function exportMatrixCsv() {
+    if (!data) return;
+    const headers = [
+      "story_number",
+      "story_key",
+      "story_title",
+      "story_url",
+      "story_assignees",
+      "story_labels",
+      "story_milestone",
+      "test_path",
+      "test_title",
+      "test_url",
+      "test_assigned_to",
+      "test_suite",
+      "test_priority",
+      "latest_result",
+      "latest_executed_at",
+      "latest_executed_by",
+      "defect_open_count",
+      "defect_closed_count",
+      "defect_numbers"
+    ];
+
+    const rows: string[] = [];
+    rows.push(headers.join(","));
+
+    const list = filteredStories.length ? filteredStories : data.stories;
+
+    for (const s of list) {
+      const assigneesStr = (s.assignees || []).join("; ");
+      const labelsStr = (s.labels || []).map((l) => l.name).join("; ");
+      if (s.tests.length === 0) {
+        const row = [
+          s.number,
+          s.key,
+          s.title,
+          s.url,
+          assigneesStr,
+          labelsStr,
+          s.milestone || "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          0,
+          0,
+          ""
+        ].map(csvEscape).join(",");
+        rows.push(row);
+      } else {
+        for (const t of s.tests) {
+          const openCount = t.defects.filter((d) => (d.state || "").toLowerCase() === "open").length;
+          const closedCount = t.defects.length - openCount;
+          const defectNumbers = t.defects.map((d) => `#${d.number}`).join("; ");
+          const row = [
+            s.number,
+            s.key,
+            s.title,
+            s.url,
+            assigneesStr,
+            labelsStr,
+            s.milestone || "",
+            t.path,
+            t.title,
+            t.url,
+            t.assigned_to || "",
+            t.suite || "",
+            t.priority || "",
+            (t.latestRun?.result || "").toUpperCase(),
+            t.latestRun?.executed_at || "",
+            t.latestRun?.executed_by || "",
+            openCount,
+            closedCount,
+            defectNumbers
+          ].map(csvEscape).join(",");
+          rows.push(row);
+        }
+      }
+    }
+
+    const csv = rows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `traceability_matrix_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportGapsCsv() {
+    if (!data) return;
+    const headers = ["category", "identifier"];
+    const rows: string[] = [];
+    rows.push(headers.join(","));
+    for (const n of data.gaps.storiesWithoutTests) {
+      rows.push(["story_without_tests", `#${n}`].map(csvEscape).join(","));
+    }
+    for (const p of data.gaps.testCasesWithoutStory) {
+      rows.push(["test_without_story", p].map(csvEscape).join(","));
+    }
+    for (const n of data.gaps.defectsWithoutLink) {
+      rows.push(["defect_without_link", `#${n}`].map(csvEscape).join(","));
+    }
+    const csv = rows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `traceability_gaps_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -269,8 +401,24 @@ export default function TraceabilityPage() {
           </datalist>
         </div>
 
-        <div className="text-sm text-gray-600">
-          Showing {filteredStories.length} of {data.stories.length} stories
+        <div className="flex justify-between items-center">
+          <div className="text-sm text-gray-600">
+            Showing {filteredStories.length} of {data.stories.length} stories
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={exportMatrixCsv}
+              className="px-3 py-1.5 rounded border text-sm hover:bg-gray-50"
+            >
+              Export CSV
+            </button>
+            <button
+              onClick={exportGapsCsv}
+              className="px-3 py-1.5 rounded border text-sm hover:bg-gray-50"
+            >
+              Export Gaps CSV
+            </button>
+          </div>
         </div>
       </div>
 
