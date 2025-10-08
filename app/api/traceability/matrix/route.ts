@@ -198,37 +198,62 @@ export async function GET(req: Request) {
       );
     }
 
-    // 3) Compute latest run per test path
-    const latestByRunDir = new Map<string, { path: string; ms: number }>();
+    // 3) Compute latest run per test path using latest.json index when available
+    const latestByPath = new Map<string, { result: string; executed_at: string; executed_by: string }>();
+    
+    // Group run directories
+    const runDirs = new Set<string>();
     for (const rf of runFiles) {
-      const exist = latestByRunDir.get(rf.runDir);
-      if (!exist || rf.ms > exist.ms) latestByRunDir.set(rf.runDir, { path: rf.path, ms: rf.ms });
+      runDirs.add(rf.runDir);
     }
 
-    const latestByPath = new Map<string, { result: string; executed_at: string; executed_by: string }>();
-
-    // Fetch only the latest run file for each runDir
-    const latestRunEntries = Array.from(latestByRunDir.values());
-    for (let i = 0; i < latestRunEntries.length; i += batchSize) {
-      const batch = latestRunEntries.slice(i, i + batchSize);
+    // Try to read latest.json for each run directory
+    const runDirArray = Array.from(runDirs);
+    for (let i = 0; i < runDirArray.length; i += batchSize) {
+      const batch = runDirArray.slice(i, i + batchSize);
       await Promise.all(
-        batch.map(async (entry) => {
+        batch.map(async (runDir) => {
+          const latestPath = `${runDir}/latest.json`;
+          const encoded = runDir.replace(/^qa-runs\//, "");
+          const testPath = encoded.replace(/__/g, "/");
+          
           try {
-            const res = await fetch(
-              `https://api.github.com/repos/${testsOwner}/${testsName}/contents/${encodeURIComponent(entry.path)}`,
+            // Try to fetch latest.json first
+            const latestRes = await fetch(
+              `https://api.github.com/repos/${testsOwner}/${testsName}/contents/${encodeURIComponent(latestPath)}`,
               { headers: ghHeaders, cache: "no-store" }
             );
-            if (!res.ok) return;
-            const data = await res.json();
-            const json = JSON.parse(Buffer.from(data.content || "", "base64").toString("utf-8"));
-            const runDir = entry.path.substring(0, entry.path.lastIndexOf("/"));
-            const encoded = runDir.replace(/^qa-runs\//, "");
-            const testPath = encoded.replace(/__/g, "/");
-            latestByPath.set(testPath, {
-              result: (json.result || "").toLowerCase(),
-              executed_at: json.executed_at || "",
-              executed_by: json.executed_by || "",
-            });
+            
+            if (latestRes.ok) {
+              // Use latest.json index
+              const latestData = await latestRes.json();
+              const json = JSON.parse(Buffer.from(latestData.content || "", "base64").toString("utf-8"));
+              latestByPath.set(testPath, {
+                result: (json.result || "").toLowerCase(),
+                executed_at: json.executed_at || "",
+                executed_by: json.executed_by || "",
+              });
+            } else {
+              // Fallback: scan for latest run file
+              const runsInDir = runFiles.filter(rf => rf.runDir === runDir);
+              if (runsInDir.length === 0) return;
+              
+              const latest = runsInDir.reduce((max, rf) => rf.ms > max.ms ? rf : max);
+              const runRes = await fetch(
+                `https://api.github.com/repos/${testsOwner}/${testsName}/contents/${encodeURIComponent(latest.path)}`,
+                { headers: ghHeaders, cache: "no-store" }
+              );
+              
+              if (runRes.ok) {
+                const runData = await runRes.json();
+                const json = JSON.parse(Buffer.from(runData.content || "", "base64").toString("utf-8"));
+                latestByPath.set(testPath, {
+                  result: (json.result || "").toLowerCase(),
+                  executed_at: json.executed_at || "",
+                  executed_by: json.executed_by || "",
+                });
+              }
+            }
           } catch {}
         })
       );
