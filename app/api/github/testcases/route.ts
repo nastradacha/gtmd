@@ -131,6 +131,13 @@ export async function GET(req: Request) {
                 const assignedValue = (assignedMatch[1] || assignedMatch[2] || "").trim();
                 if (assignedValue) entry.assigned_to = assignedValue;
               }
+              
+              // Match story_id
+              const storyMatch = fmMatch[1].match(/^story_id:\s*(?:["'](.+?)["']|(.+?))\s*$/m);
+              if (storyMatch) {
+                const storyValue = (storyMatch[1] || storyMatch[2] || "").trim();
+                if (storyValue) entry.storyId = storyValue;
+              }
             }
           }
         } catch {
@@ -185,6 +192,12 @@ export async function GET(req: Request) {
                   if (assignedMatch) {
                     const assignedValue = (assignedMatch[1] || assignedMatch[2] || "").trim();
                     if (assignedValue) entry.assigned_to = assignedValue;
+                  }
+
+                  const storyMatch = fmMatch[1].match(/^story_id:\s*(?:["'](.+?)["']|(.+?))\s*$/m);
+                  if (storyMatch) {
+                    const storyValue = (storyMatch[1] || storyMatch[2] || "").trim();
+                    if (storyValue) entry.storyId = storyValue;
                   }
                 }
               }
