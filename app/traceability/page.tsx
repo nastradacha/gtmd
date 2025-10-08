@@ -56,6 +56,7 @@ export default function TraceabilityPage() {
   const [assigneeFilter, setAssigneeFilter] = useState("");
 
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  const [selectedStory, setSelectedStory] = useState<MatrixStory | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -139,6 +140,27 @@ export default function TraceabilityPage() {
   function toggleExpand(num: number) {
     setExpanded((prev) => ({ ...prev, [num]: !prev[num] }));
   }
+
+  function openStoryDetails(s: MatrixStory) {
+    setSelectedStory(s);
+  }
+
+  function closeStoryDetails() {
+    setSelectedStory(null);
+  }
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && selectedStory) {
+        e.preventDefault();
+        setSelectedStory(null);
+      }
+    }
+    if (selectedStory) {
+      window.addEventListener("keydown", onKeyDown);
+    }
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedStory]);
 
   function csvEscape(val: any): string {
     if (val === null || val === undefined) return "";
@@ -446,6 +468,13 @@ export default function TraceabilityPage() {
                     {s.key}
                   </a>
                   <span className="text-gray-800">{s.title}</span>
+                  <button
+                    onClick={() => openStoryDetails(s)}
+                    className="ml-1 px-2 py-0.5 text-xs rounded border hover:bg-gray-50"
+                    aria-label={`Open details for ${s.key}`}
+                  >
+                    Details
+                  </button>
                 </div>
                 <div className="mt-1 flex gap-2 flex-wrap">
                   {s.labels?.slice(0, 4).map((l) => (
@@ -632,6 +661,180 @@ export default function TraceabilityPage() {
           )}
         </div>
       </div>
+
+      {/* Drill-down Side Panel */}
+      {selectedStory && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex justify-end z-50"
+          role="dialog"
+          aria-modal="true"
+          onClick={closeStoryDetails}
+        >
+          <div
+            className="bg-white w-full sm:w-[520px] max-w-[90vw] h-full overflow-y-auto shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between p-4 border-b">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <a
+                    href={selectedStory.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-semibold text-blue-700 hover:underline"
+                  >
+                    {selectedStory.key}
+                  </a>
+                  <span className="text-gray-700">{selectedStory.title}</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {selectedStory.labels?.map((l) => (
+                    <span
+                      key={l.name}
+                      className="px-2 py-0.5 rounded text-[11px] border"
+                      style={{
+                        backgroundColor: `#${l.color}`,
+                        color: parseInt(l.color || "000000", 16) > 0xffffff / 2 ? "#000" : "#fff",
+                        borderColor: `#${l.color}`,
+                      }}
+                    >
+                      {l.name}
+                    </span>
+                  ))}
+                  {selectedStory.milestone && (
+                    <span className="px-2 py-0.5 rounded text-[11px] bg-purple-50 text-purple-700 border border-purple-200">
+                      {selectedStory.milestone}
+                    </span>
+                  )}
+                  {selectedStory.assignees?.slice(0, 5).map((a) => (
+                    <span key={a} className="px-2 py-0.5 rounded-full text-[11px] bg-blue-100 text-blue-800 border border-blue-300">
+                      @{a}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={closeStoryDetails}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                aria-label="Close details"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* Summary */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="border rounded p-3 text-center">
+                  <div className="text-xs text-gray-600">Tests</div>
+                  <div className="text-xl font-semibold">{selectedStory.metrics.testCount}</div>
+                </div>
+                <div className="border rounded p-3 text-center">
+                  <div className="text-xs text-gray-600">Pass / Fail</div>
+                  <div className="text-xl font-semibold text-green-700 inline-block mr-2">{selectedStory.metrics.pass}</div>
+                  <div className="text-xl font-semibold text-red-700 inline-block">{selectedStory.metrics.fail}</div>
+                </div>
+                <div className="border rounded p-3 text-center">
+                  <div className="text-xs text-gray-600">Coverage</div>
+                  <div className="text-xl font-semibold">{selectedStory.metrics.coveragePercent}%</div>
+                </div>
+              </div>
+
+              {/* Tests list */}
+              <div className="border rounded">
+                <div className="px-3 py-2 border-b text-sm font-semibold bg-gray-50">Tests</div>
+                <div className="p-3 space-y-2">
+                  {selectedStory.tests.length ? (
+                    selectedStory.tests.map((t) => (
+                      <div key={t.path} className="border rounded p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="min-w-0">
+                            <a href={t.url} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline font-medium">
+                              {t.title}
+                            </a>
+                            <div className="text-xs text-gray-500 truncate"><code>{t.path}</code></div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap justify-end">
+                            {t.assigned_to && (
+                              <span className="px-2 py-0.5 rounded-full text-[11px] bg-blue-100 text-blue-800 border border-blue-300">
+                                @{t.assigned_to}
+                              </span>
+                            )}
+                            {t.suite && (
+                              <span className="px-2 py-0.5 rounded text-[11px] bg-gray-100 text-gray-700 border">{t.suite}</span>
+                            )}
+                            {t.priority && (
+                              <span className="px-2 py-0.5 rounded text-[11px] bg-amber-100 text-amber-800 border border-amber-200">{t.priority}</span>
+                            )}
+                            {t.latestRun ? (
+                              <span
+                                className={`px-2 py-0.5 rounded text-[11px] border ${
+                                  t.latestRun.result === "pass"
+                                    ? "bg-green-100 text-green-800 border-green-300"
+                                    : t.latestRun.result === "fail"
+                                    ? "bg-red-100 text-red-800 border-red-300"
+                                    : "bg-gray-100 text-gray-700 border-gray-300"
+                                }`}
+                              >
+                                {t.latestRun.result.toUpperCase()} by @{t.latestRun.executed_by}
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[11px] bg-gray-100 text-gray-700 border">NO RUN</span>
+                            )}
+                          </div>
+                        </div>
+                        {t.defects.length > 0 && (
+                          <div className="mt-2 flex gap-2 flex-wrap">
+                            {t.defects.map((d) => (
+                              <a
+                                key={d.number}
+                                href={d.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className={`px-2 py-0.5 rounded text-[11px] border ${
+                                  d.state === "open" ? "bg-red-50 text-red-700 border-red-200" : "bg-green-50 text-green-700 border-green-200"
+                                }`}
+                              >
+                                #{d.number} {d.title}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-sm text-gray-600">No tests available.</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Defects list */}
+              <div className="border rounded">
+                <div className="px-3 py-2 border-b text-sm font-semibold bg-gray-50">Defects</div>
+                <div className="p-3 space-y-2">
+                  {selectedStory.defects.length ? (
+                    selectedStory.defects.map((d) => (
+                      <a
+                        key={d.number}
+                        href={d.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={`block px-3 py-2 rounded border ${
+                          d.state === "open" ? "bg-red-50 text-red-700 border-red-200" : "bg-green-50 text-green-700 border-green-200"
+                        }`}
+                      >
+                        <span className="font-mono">#{d.number}</span> {d.title}
+                      </a>
+                    ))
+                  ) : (
+                    <div className="text-sm text-gray-600">No defects linked.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
