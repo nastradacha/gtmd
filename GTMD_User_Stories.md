@@ -314,19 +314,154 @@
 - Preserve full edit history in GitHub.  
 
 **Priority:** P2  
-**Story Points:** 3  
-**Status:** Planned
+**Story Points:** 3  **Status:** Planned
 
----
+ ---
+ 
+ ## 🔗 8. Traceability & Matrix
+ 
+ ### 8.1 Parse story_id from Test Cases
+ - **As a** QA lead  
+ - **I want** to extract `story_id` from test case frontmatter  
+ - **So that** test cases can be linked to stories.
+ 
+ **Acceptance Criteria**
+ - `app/api/github/testcases/route.ts` parses `story_id` (quotes optional).  
+ - Returned `TestCase` objects include `storyId`.  
+ - Pending PR files are also parsed for `story_id`.  
+ - Manual verification with sample files or lightweight test.
+ 
+ **Priority:** P1  
+ **Story Points:** 3  
+ **Status:** Planned
+ 
+ ---
+ 
+ ### 8.2 Traceability Matrix Aggregator API
+ - **As a** QA lead  
+ - **I want** a single API that aggregates Stories, Test Cases, Latest Runs, and Defects  
+ - **So that** I can render a full traceability matrix.
+ 
+ **Acceptance Criteria**
+ - New route: `app/api/traceability/matrix/route.ts`.  
+ - Aggregates: stories (issues), test cases (with `storyId`), latest run per test from `qa-runs/**`, and defects with links.  
+ - Returns gaps: stories without tests, tests without story, defects without links.  
+ - Batched GitHub requests; typical response < 2s.
+ 
+ **Priority:** P1  
+ **Story Points:** 5  
+ **Status:** Planned
+ 
+ ---
+ 
+ ### 8.3 Traceability Matrix UI
+ - **As a** QA lead  
+ - **I want** a matrix page showing story coverage, latest health, and defects  
+ - **So that** I can see quality status at a glance.
+ 
+ **Acceptance Criteria**
+ - New page `app/traceability/page.tsx` with nav item "Traceability".  
+ - Table columns: Story, Tests, Defects, Coverage, Assignees.  
+ - Expand rows to list individual tests with latest Pass/Fail/No Run badges and assignee.  
+ - Expand defects with Open/Closed counts and links.  
+ - Filters: label, milestone, suite, priority, assignment, folder.  
+ - Consumes the matrix API.
+ 
+ **Priority:** P1  
+ **Story Points:** 8  
+ **Status:** Planned
+ 
+ ---
+ 
+ ### 8.4 Gaps Detection UI
+ - **As a** QA lead  
+ - **I want** a gaps section listing missing coverage  
+ - **So that** I can prioritize work.
+ 
+ **Acceptance Criteria**
+ - Cards for: Stories without tests, Test cases without story, Defects without links.  
+ - Items are clickable to navigate.  
+ - Lives on the Traceability page.
+ 
+ **Priority:** P1  
+ **Story Points:** 3  
+ **Status:** Planned
+ 
+ ---
+ 
+ ### 8.5 Export Matrix CSV
+ - **As a** QA manager  
+ - **I want** to export the matrix to CSV  
+ - **So that** I can share with stakeholders.
+ 
+ **Acceptance Criteria**
+ - Export button on Traceability page.  
+ - CSV includes story, tests, latest result, defect counts, assignees.  
+ - Reuses report-friendly headers.
+ 
+ **Priority:** P2  
+ **Story Points:** 2  
+ **Status:** Planned
+ 
+ ---
+ 
+ ### 8.6 Defect Link Conventions
+ - **As a** QA lead  
+ - **I want** a consistent convention for linking defects to stories/test cases  
+ - **So that** associations are reliable in the matrix.
+ 
+ **Acceptance Criteria**
+ - Defect creation flow adds a YAML block with `story_id` and optional `test_case`.  
+ - Existing defects can be edited to include this block.  
+ - Parser added in the matrix API.
+ 
+ **Priority:** P2  
+ **Story Points:** 3  
+ **Status:** Planned
+ 
+ ---
+ 
+ ### 8.7 Caching & Rate Limits
+ - **As an** engineer  
+ - **I want** to cache the matrix briefly  
+ - **So that** we avoid rate limits and speed up the UI.
+ 
+ **Acceptance Criteria**
+ - In-memory cache for matrix (60s) with `?nocache=1` override.  
+ - Batched GitHub requests for all upstream calls.  
+ - Documented in README.
+ 
+ **Priority:** P2  
+ **Story Points:** 2  
+ **Status:** Planned
+ 
+ ---
+ 
+ ### 8.8 Drill-down Panel (Optional)
+ - **As a** tester  
+ - **I want** a side panel to view full traceability for a single story  
+ - **So that** I can inspect details without leaving the matrix.
+ 
+ **Acceptance Criteria**
+ - Clicking a story opens a panel with tests, latest runs, and defects.  
+ - Quick links to open items.  
+ - Keyboard accessible.
+ 
+ **Priority:** P3  
+ **Story Points:** 3  
+ **Status:** Planned
+ 
+ ---
+ 
+ ## 📎 Summary Table
 
-## 📎 Summary Table
-
-| Area | Stories | Points | Priority |
-|------|---------|--------|----------|
-| Auth & Onboarding | 2 | 6 | P1 |
-| Story Management | 3 | 13 | P1–P2 |
-| Test Cases | 4 | 21 | P1–P2 |
-| Defects | 2 | 9 | P1–P2 |
-| Dashboard & Reports | 3 | 13 | P1–P3 |
-| Admin | 2 | 11 | P1–P3 |
-| **Total** | 16 stories | **73 points** | — |
+ | Area | Stories | Points | Priority |
+ |------|---------|--------|----------|
+ | Auth & Onboarding | 2 | 6 | P1 |
+ | Story Management | 3 | 13 | P1–P2 |
+ | Test Cases | 4 | 21 | P1–P2 |
+ | Defects | 2 | 9 | P1–P2 |
+ | Dashboard & Reports | 3 | 13 | P1–P3 |
+ | Admin | 2 | 11 | P1–P3 |
+ | Traceability & Matrix | 8 | 29 | P1–P3 |
+ | **Total** | 24 stories | **102 points** | — |
