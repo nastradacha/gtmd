@@ -492,6 +492,50 @@ export default function TestCasesPage() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Component</label>
+                  <input
+                    type="text"
+                    value={formData.component}
+                    onChange={(e) => setFormData({ ...formData, component: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                    placeholder="e.g., Login, Checkout"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Environment</label>
+                  <input
+                    type="text"
+                    value={formData.env}
+                    onChange={(e) => setFormData({ ...formData, env: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                    placeholder="e.g., dev, staging, prod"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Preconditions</label>
+                <textarea
+                  value={formData.preconditions}
+                  onChange={(e) => setFormData({ ...formData, preconditions: e.target.value })}
+                  className="w-full border rounded px-3 py-2 h-20"
+                  placeholder="Setup requirements or prerequisites"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Test Data</label>
+                <textarea
+                  value={formData.data}
+                  onChange={(e) => setFormData({ ...formData, data: e.target.value })}
+                  className="w-full border rounded px-3 py-2 h-20"
+                  placeholder="Test data notes or references"
+                />
+              </div>
+
               <button
                 type="submit"
                 disabled={submitting}
@@ -537,6 +581,31 @@ export default function TestCasesPage() {
                 >
                   <div className="flex items-center gap-2 flex-wrap">
                     <div className="font-medium text-sm">{displayName(f)}</div>
+                    {f.suite && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-700 border">
+                        {f.suite}
+                      </span>
+                    )}
+                    {f.priority && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                        {f.priority}
+                      </span>
+                    )}
+                    {f.component && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200">
+                        {f.component}
+                      </span>
+                    )}
+                    {f.status && (
+                      <span className={`text-[10px] px-2 py-0.5 rounded border ${
+                        f.status === "Approved" ? "bg-green-100 text-green-800 border-green-300" :
+                        f.status === "Ready" ? "bg-blue-100 text-blue-800 border-blue-300" :
+                        f.status === "Obsolete" ? "bg-gray-100 text-gray-600 border-gray-300" :
+                        "bg-yellow-100 text-yellow-800 border-yellow-300"
+                      }`}>
+                        {f.status}
+                      </span>
+                    )}
                     {f.assigned_to && (
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300">
                         @{f.assigned_to}

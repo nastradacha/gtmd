@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { title, storyId, steps, expected, priority, suite, folder } = body;
+    const { title, story_id, steps, expected, priority, suite, folder, component, preconditions, data, env } = body;
 
     if (!title || !steps || !expected) {
       return new Response(
@@ -58,9 +58,14 @@ export async function POST(req: NextRequest) {
     // Create markdown content with audit metadata
     const content = `---
 title: ${quote(title)}
-story_id: ${quote(storyId || "N/A")}
+story_id: ${quote(story_id || "")}
 priority: ${quote(priority || "P2")}
 suite: ${quote(suite || "General")}
+${component ? `component: ${quote(component)}` : ""}
+${preconditions ? `preconditions: ${quote(preconditions)}` : ""}
+${data ? `data: ${quote(data)}` : ""}
+${env ? `env: ${quote(env)}` : ""}
+status: "Draft"
 created: ${quote(new Date().toISOString())}
 created_by: ${quote(login)}
 ---
@@ -68,7 +73,11 @@ created_by: ${quote(login)}
 # ${title}
 
 ## Story Reference
-${storyId ? `Story #${storyId}` : "No story linked"}
+${story_id ? `Story #${story_id}` : "No story linked"}
+
+${preconditions ? `## Preconditions\n${preconditions}\n` : ""}
+
+${data ? `## Test Data\n${data}\n` : ""}
 
 ## Test Steps
 ${steps}
@@ -76,11 +85,11 @@ ${steps}
 ## Expected Results
 ${expected}
 
-## Priority
-${priority || "P2"}
-
-## Test Suite
-${suite || "General"}
+## Metadata
+- **Priority**: ${priority || "P2"}
+- **Suite**: ${suite || "General"}
+${component ? `- **Component**: ${component}` : ""}
+${env ? `- **Environment**: ${env}` : ""}
 `;
 
     // Get default branch SHA
@@ -167,7 +176,7 @@ ${suite || "General"}
       },
       body: JSON.stringify({
         title: `New Test Case: ${title}`,
-        body: `## Test Case Details\n\n- **Story ID**: ${storyId || "N/A"}\n- **Priority**: ${priority || "P2"}\n- **Suite**: ${suite || "General"}\n- **Folder**: ${folderPath}\n\n## Description\nThis PR adds a new test case for review.\n\n### Steps\n${steps}\n\n### Expected Results\n${expected}`,
+        body: `## Test Case Details\n\n- **Story ID**: ${story_id || "N/A"}\n- **Priority**: ${priority || "P2"}\n- **Suite**: ${suite || "General"}\n${component ? `- **Component**: ${component}\n` : ""}- **Folder**: ${folderPath}\n\n## Description\nThis PR adds a new test case for review.\n\n### Steps\n${steps}\n\n### Expected Results\n${expected}`,
         head: branchName,
         base: "main",
       }),
