@@ -35,9 +35,21 @@ export interface TestCase {
   url: string;
   content?: string;
   sha?: string;
-  storyId?: string;
-  priority?: string;
-  suite?: string;
+  // Frontmatter fields (Schema v2)
+  story_id?: string;           // Linked story (US-123 or 123)
+  title?: string;              // Test case title
+  suite?: string;              // Test suite (Smoke, Regression, etc.)
+  priority?: string;           // P1, P2, P3
+  component?: string;          // Component under test
+  preconditions?: string;      // Setup requirements
+  data?: string;               // Test data notes
+  steps?: string;              // Execution steps
+  expected?: string;           // Expected results
+  env?: string;                // Environment (dev, staging, prod)
+  app_version?: string;        // Target version
+  owner?: string;              // Author/owner
+  assigned_to?: string;        // Assigned tester
+  status?: string;             // Draft, Ready, Approved, Obsolete
   // If the file is coming from an open PR branch, mark as pending review
   pending?: boolean;
   // Git reference/branch to fetch this file from (for pending review files)
@@ -45,19 +57,19 @@ export interface TestCase {
   // Optional PR context for pending files
   prNumber?: number;
   prUrl?: string;
-  // Frontmatter title extracted from the markdown file
-  title?: string;
-  // Assigned user from frontmatter
-  assigned_to?: string;
 }
 
 export interface TestCaseFormData {
   title: string;
-  storyId: string;
+  story_id: string;
   steps: string;
   expected: string;
   priority: "P1" | "P2" | "P3";
   suite: string;
+  component?: string;
+  preconditions?: string;
+  data?: string;
+  env?: string;
   folder?: string;
 }
 

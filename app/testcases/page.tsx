@@ -35,11 +35,15 @@ export default function TestCasesPage() {
 
   const [formData, setFormData] = useState<TestCaseFormData>({
     title: "",
-    storyId: "",
+    story_id: "",
     steps: "",
     expected: "",
     priority: "P2",
     suite: "General",
+    component: "",
+    preconditions: "",
+    data: "",
+    env: "",
     folder: "manual/General",
   });
 
@@ -338,7 +342,7 @@ export default function TestCasesPage() {
       // Reset form
       setFormData({
         title: "",
-        storyId: "",
+        story_id: "",
         steps: "",
         expected: "",
         priority: "P2",
@@ -431,8 +435,8 @@ export default function TestCasesPage() {
                 <label className="block text-sm font-medium mb-1">Story ID</label>
                 <input
                   type="text"
-                  value={formData.storyId}
-                  onChange={(e) => setFormData({ ...formData, storyId: e.target.value })}
+                  value={formData.story_id}
+                  onChange={(e) => setFormData({ ...formData, story_id: e.target.value })}
                   className="w-full border rounded px-3 py-2"
                   placeholder="e.g., 123"
                 />

@@ -158,10 +158,12 @@ export async function GET(req: Request) {
       name: string;
       url: string;
       title?: string;
-      storyId?: string;
+      story_id?: string;
       assigned_to?: string;
       suite?: string;
       priority?: string;
+      component?: string;
+      status?: string;
     };
 
     const testCases: TestCaseLite[] = testFiles.map((p) => ({
@@ -186,9 +188,11 @@ export async function GET(req: Request) {
             const meta = parseYamlFrontmatter(content);
             if (meta.title) tc.title = meta.title;
             if (meta.assigned_to) tc.assigned_to = meta.assigned_to;
-            if (meta.story_id) tc.storyId = meta.story_id;
+            if (meta.story_id) tc.story_id = meta.story_id;
             if (meta.suite) tc.suite = meta.suite;
             if (meta.priority) tc.priority = meta.priority;
+            if (meta.component) tc.component = meta.component;
+            if (meta.status) tc.status = meta.status;
           } catch {}
         })
       );
@@ -266,7 +270,7 @@ export async function GET(req: Request) {
 
     // Test cases without story
     for (const tc of testCases) {
-      if (!tc.storyId) gaps.testCasesWithoutStory.push(tc.path);
+      if (!tc.story_id) gaps.testCasesWithoutStory.push(tc.path);
     }
 
     // Defects without link
@@ -277,7 +281,7 @@ export async function GET(req: Request) {
     for (const s of stories) {
       const numStr = String(s.number);
       const keys = new Set([numStr, `US-${numStr}`, `#${numStr}`]);
-      const testsForStory = testCases.filter((tc) => tc.storyId && keys.has(String(tc.storyId)));
+      const testsForStory = testCases.filter((tc) => tc.story_id && keys.has(String(tc.story_id)));
 
       if (testsForStory.length === 0) {
         gaps.storiesWithoutTests.push(s.number);

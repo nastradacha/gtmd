@@ -1,6 +1,18 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
+function parseFrontmatter(content: string): Record<string, string> {
+  const fmMatch = content.match(/^---\s*\r?\n([\s\S]+?)\r?\n---/);
+  if (!fmMatch) return {};
+  const block = fmMatch[1];
+  const meta: Record<string, string> = {};
+  block.split(/\r?\n/).forEach((line) => {
+    const m = line.match(/^(\w[\w_-]*):\s*(?:["'](.+?)["']|(.+?))\s*$/);
+    if (m) meta[m[1]] = (m[2] || m[3] || "").trim();
+  });
+  return meta;
+}
+
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) {
@@ -114,31 +126,23 @@ export async function GET(req: Request) {
           if (!res.ok) return;
           const data = await res.json();
           const content = Buffer.from(data.content || "", "base64").toString("utf-8");
-          const fmMatch = content.match(/^---\s*\r?\n([\s\S]+?)\r?\n---/);
-          if (fmMatch) {
-            const entry = map.get(p);
-            if (entry) {
-              // Match title with or without quotes, handling both single and double quotes
-              const titleMatch = fmMatch[1].match(/^title:\s*(?:["'](.+?)["']|(.+?))\s*$/m);
-              if (titleMatch) {
-                const titleValue = (titleMatch[1] || titleMatch[2] || "").trim();
-                if (titleValue) entry.title = titleValue;
-              }
-              
-              // Match assigned_to
-              const assignedMatch = fmMatch[1].match(/^assigned_to:\s*(?:["'](.+?)["']|(.+?))\s*$/m);
-              if (assignedMatch) {
-                const assignedValue = (assignedMatch[1] || assignedMatch[2] || "").trim();
-                if (assignedValue) entry.assigned_to = assignedValue;
-              }
-              
-              // Match story_id
-              const storyMatch = fmMatch[1].match(/^story_id:\s*(?:["'](.+?)["']|(.+?))\s*$/m);
-              if (storyMatch) {
-                const storyValue = (storyMatch[1] || storyMatch[2] || "").trim();
-                if (storyValue) entry.storyId = storyValue;
-              }
-            }
+          const meta = parseFrontmatter(content);
+          const entry = map.get(p);
+          if (entry && Object.keys(meta).length) {
+            if (meta.title) entry.title = meta.title;
+            if (meta.story_id) entry.story_id = meta.story_id;
+            if (meta.suite) entry.suite = meta.suite;
+            if (meta.priority) entry.priority = meta.priority;
+            if (meta.component) entry.component = meta.component;
+            if (meta.preconditions) entry.preconditions = meta.preconditions;
+            if (meta.data) entry.data = meta.data;
+            if (meta.steps) entry.steps = meta.steps;
+            if (meta.expected) entry.expected = meta.expected;
+            if (meta.env) entry.env = meta.env;
+            if (meta.app_version) entry.app_version = meta.app_version;
+            if (meta.owner) entry.owner = meta.owner;
+            if (meta.assigned_to) entry.assigned_to = meta.assigned_to;
+            if (meta.status) entry.status = meta.status;
           }
         } catch {
           // ignore
@@ -180,25 +184,22 @@ export async function GET(req: Request) {
               if (contentRes.ok) {
                 const contentData = await contentRes.json();
                 const content = Buffer.from(contentData.content || "", "base64").toString("utf-8");
-                const fmMatch = content.match(/^---\s*\r?\n([\s\S]+?)\r?\n---/);
-                if (fmMatch) {
-                  const titleMatch = fmMatch[1].match(/^title:\s*(?:["'](.+?)["']|(.+?))\s*$/m);
-                  if (titleMatch) {
-                    const titleValue = (titleMatch[1] || titleMatch[2] || "").trim();
-                    if (titleValue) entry.title = titleValue;
-                  }
-                  
-                  const assignedMatch = fmMatch[1].match(/^assigned_to:\s*(?:["'](.+?)["']|(.+?))\s*$/m);
-                  if (assignedMatch) {
-                    const assignedValue = (assignedMatch[1] || assignedMatch[2] || "").trim();
-                    if (assignedValue) entry.assigned_to = assignedValue;
-                  }
-
-                  const storyMatch = fmMatch[1].match(/^story_id:\s*(?:["'](.+?)["']|(.+?))\s*$/m);
-                  if (storyMatch) {
-                    const storyValue = (storyMatch[1] || storyMatch[2] || "").trim();
-                    if (storyValue) entry.storyId = storyValue;
-                  }
+                const meta = parseFrontmatter(content);
+                if (Object.keys(meta).length) {
+                  if (meta.title) entry.title = meta.title;
+                  if (meta.story_id) entry.story_id = meta.story_id;
+                  if (meta.suite) entry.suite = meta.suite;
+                  if (meta.priority) entry.priority = meta.priority;
+                  if (meta.component) entry.component = meta.component;
+                  if (meta.preconditions) entry.preconditions = meta.preconditions;
+                  if (meta.data) entry.data = meta.data;
+                  if (meta.steps) entry.steps = meta.steps;
+                  if (meta.expected) entry.expected = meta.expected;
+                  if (meta.env) entry.env = meta.env;
+                  if (meta.app_version) entry.app_version = meta.app_version;
+                  if (meta.owner) entry.owner = meta.owner;
+                  if (meta.assigned_to) entry.assigned_to = meta.assigned_to;
+                  if (meta.status) entry.status = meta.status;
                 }
               }
             } catch {
