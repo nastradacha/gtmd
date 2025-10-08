@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { GitHubIssue, DefectFormData } from "@/lib/types";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import UserSelector from "@/components/UserSelector";
 
 export default function DefectsPage() {
   const [defects, setDefects] = useState<GitHubIssue[]>([]);
@@ -400,38 +403,105 @@ ${formData.description}
             className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h2 className="text-2xl font-bold">{selectedDefect.title}</h2>
-                <div className="text-sm text-gray-600 mt-1">
-                  #{selectedDefect.number} • Opened by {selectedDefect.user.login}
+            {/* Header */}
+            <div className="flex justify-between items-start mb-6">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`px-2 py-1 rounded text-xs font-bold ${
+                    selectedDefect.state === 'open' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                  }`}>
+                    {selectedDefect.state === 'open' ? 'DEFECT' : 'RESOLVED'}
+                  </span>
+                  <span className="text-sm text-gray-500">#{selectedDefect.number}</span>
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">{selectedDefect.title}</h2>
+                <div className="flex items-center gap-3 text-sm text-gray-600">
+                  <div>
+                    <span className="font-medium">Reported by</span> @{selectedDefect.user.login}
+                  </div>
+                  {selectedDefect.assignees && selectedDefect.assignees.length > 0 && (
+                    <div>
+                      <span className="font-medium">Assigned to</span> {selectedDefect.assignees.map(a => `@${a.login}`).join(', ')}
+                    </div>
+                  )}
                 </div>
               </div>
               <button
                 onClick={() => setSelectedDefect(null)}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
+                className="text-gray-400 hover:text-gray-600 text-3xl leading-none ml-4"
               >
                 ×
               </button>
             </div>
 
-            <div className="flex gap-2 mb-4">
-              {selectedDefect.labels.map((label) => (
-                <span
-                  key={label.id}
-                  className="px-2 py-1 rounded text-xs font-medium"
-                  style={{
-                    backgroundColor: `#${label.color}`,
-                    color: parseInt(label.color, 16) > 0xffffff / 2 ? "#000" : "#fff",
-                  }}
-                >
-                  {label.name}
-                </span>
-              ))}
+            {/* Metadata Bar */}
+            <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-lg p-4 mb-6 border border-red-200">
+              <div className="flex flex-wrap gap-4">
+                {selectedDefect.labels.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Labels</div>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedDefect.labels.map((label) => (
+                        <span
+                          key={label.id}
+                          className="px-2 py-1 rounded text-xs font-medium"
+                          style={{
+                            backgroundColor: `#${label.color}`,
+                            color: parseInt(label.color, 16) > 0xffffff / 2 ? "#000" : "#fff",
+                          }}
+                        >
+                          {label.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Status</div>
+                  <div className="text-sm text-gray-800 font-medium capitalize">{selectedDefect.state}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Reported</div>
+                  <div className="text-xs text-gray-700">{new Date(selectedDefect.created_at).toLocaleDateString()}</div>
+                </div>
+                {selectedDefect.updated_at && (
+                  <div>
+                    <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Last Updated</div>
+                    <div className="text-xs text-gray-700">{new Date(selectedDefect.updated_at).toLocaleDateString()}</div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div className="prose max-w-none mb-4">
-              <p className="whitespace-pre-wrap">{selectedDefect.body || "No description"}</p>
+            {/* Description */}
+            <div className="bg-white rounded-lg border p-6 mb-6">
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Description</h3>
+              <div className="prose prose-sm max-w-none">
+                {selectedDefect.body ? (
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      h1: ({node, ...props}) => <h1 className="text-2xl font-bold text-gray-900 mb-3 pb-2 border-b" {...props} />,
+                      h2: ({node, ...props}) => <h2 className="text-xl font-semibold text-gray-800 mb-2 mt-4" {...props} />,
+                      h3: ({node, ...props}) => <h3 className="text-lg font-medium text-gray-700 mb-2 mt-3" {...props} />,
+                      p: ({node, ...props}) => <p className="text-gray-700 mb-3 leading-relaxed" {...props} />,
+                      ul: ({node, ...props}) => <ul className="list-disc list-inside space-y-1.5 mb-3 text-gray-700" {...props} />,
+                      ol: ({node, ...props}) => <ol className="list-decimal list-inside space-y-1.5 mb-3 text-gray-700" {...props} />,
+                      li: ({node, ...props}) => <li className="ml-2" {...props} />,
+                      code: ({node, inline, ...props}: any) => 
+                        inline ? 
+                          <code className="bg-gray-100 text-red-600 px-1.5 py-0.5 rounded text-sm font-mono" {...props} /> :
+                          <code className="block bg-gray-900 text-green-400 p-3 rounded-lg text-sm font-mono overflow-x-auto my-2" {...props} />,
+                      blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-red-500 pl-4 italic text-gray-600 my-3" {...props} />,
+                      a: ({node, ...props}) => <a className="text-blue-600 hover:underline" {...props} />,
+                    }}
+                  >
+                    {selectedDefect.body}
+                  </ReactMarkdown>
+                ) : (
+                  <p className="text-gray-500 italic">No description provided</p>
+                )}
+              </div>
             </div>
 
             {/* Assignment Controls */}
@@ -442,14 +512,13 @@ ${formData.description}
               <div>
                 <div className="text-sm font-medium mb-2">Assignment</div>
                 <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-                  <input
-                    type="text"
+                  <UserSelector
                     value={assignUser}
-                    onChange={(e) => setAssignUser(e.target.value)}
-                    placeholder="github username"
-                    className="border rounded px-3 py-2 text-sm"
+                    onChange={setAssignUser}
+                    placeholder="Type to search collaborators..."
+                    className="border rounded px-3 py-2 text-sm w-full"
                   />
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-shrink-0">
                     <button
                       onClick={() => assign("me")}
                       className="px-3 py-1.5 rounded border text-sm hover:bg-gray-50 disabled:opacity-50"
@@ -567,9 +636,26 @@ function DefectCard({ defect, onClick }: { defect: GitHubIssue; onClick: () => v
     <div className={`border rounded-lg p-4 ${colorClass} cursor-pointer`} onClick={onClick}>
       <div className="flex justify-between items-start">
         <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className="font-mono text-sm">#{defect.number}</span>
             <span className="font-semibold">{defect.title}</span>
+            {defect.assignees && defect.assignees.length > 0 && (
+              <div className="flex gap-1">
+                {defect.assignees.slice(0, 2).map((assignee) => (
+                  <span
+                    key={assignee.login}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300"
+                  >
+                    @{assignee.login}
+                  </span>
+                ))}
+                {defect.assignees.length > 2 && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                    +{defect.assignees.length - 2}
+                  </span>
+                )}
+              </div>
+            )}
             {defect.state === "closed" && (
               <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded">
                 Closed

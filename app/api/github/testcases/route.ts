@@ -99,31 +99,46 @@ export async function GET(req: Request) {
     }
   }
 
-  // Parse frontmatter title for each file (sample up to 50 to avoid rate limits)
-  const paths = Array.from(map.keys()).slice(0, 50);
-  await Promise.all(
-    paths.map(async (p) => {
-      try {
-        const res = await fetch(`https://api.github.com/repos/${owner}/${name}/contents/${p}`, {
-          headers,
-          cache: "no-store",
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        const content = Buffer.from(data.content || "", "base64").toString("utf-8");
-        const fmMatch = content.match(/^---\s*\n([\s\S]+?)\n---/);
-        if (fmMatch) {
-          const titleMatch = fmMatch[1].match(/^title:\s*["']?(.+?)["']?\s*$/m);
-          if (titleMatch) {
+  // Parse frontmatter title for all files (batch in groups to manage rate limits)
+  const paths = Array.from(map.keys());
+  const batchSize = 10;
+  for (let i = 0; i < paths.length; i += batchSize) {
+    const batch = paths.slice(i, i + batchSize);
+    await Promise.all(
+      batch.map(async (p) => {
+        try {
+          const res = await fetch(`https://api.github.com/repos/${owner}/${name}/contents/${p}`, {
+            headers,
+            cache: "no-store",
+          });
+          if (!res.ok) return;
+          const data = await res.json();
+          const content = Buffer.from(data.content || "", "base64").toString("utf-8");
+          const fmMatch = content.match(/^---\s*\r?\n([\s\S]+?)\r?\n---/);
+          if (fmMatch) {
             const entry = map.get(p);
-            if (entry) entry.title = titleMatch[1].trim();
+            if (entry) {
+              // Match title with or without quotes, handling both single and double quotes
+              const titleMatch = fmMatch[1].match(/^title:\s*(?:["'](.+?)["']|(.+?))\s*$/m);
+              if (titleMatch) {
+                const titleValue = (titleMatch[1] || titleMatch[2] || "").trim();
+                if (titleValue) entry.title = titleValue;
+              }
+              
+              // Match assigned_to
+              const assignedMatch = fmMatch[1].match(/^assigned_to:\s*(?:["'](.+?)["']|(.+?))\s*$/m);
+              if (assignedMatch) {
+                const assignedValue = (assignedMatch[1] || assignedMatch[2] || "").trim();
+                if (assignedValue) entry.assigned_to = assignedValue;
+              }
+            }
           }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
-      }
-    })
-  );
+      })
+    );
+  }
 
   // Also include pending files from open PRs (added/modified under qa-testcases/manual)
   const prsRes = await fetch(`https://api.github.com/repos/${owner}/${name}/pulls?state=open&per_page=50`, {
@@ -142,11 +157,42 @@ export async function GET(req: Request) {
       for (const f of prFiles) {
         const filename = f.filename as string;
         if (filename.startsWith("qa-testcases/") && filename.endsWith(".md")) {
-          const entry = map.get(filename) || { path: filename, name: filename.split("/").pop(), url: pr.html_url };
+          const entry = map.get(filename) || { path: filename, name: filename.split("/").pop(), url: pr.html_url, title: null };
           entry.pending = true;
           entry.ref = pr.head?.ref;
           entry.prNumber = pr.number;
           entry.prUrl = pr.html_url;
+          
+          // Extract title from pending PR files
+          if (!entry.title && entry.ref) {
+            try {
+              const contentRes = await fetch(`https://api.github.com/repos/${owner}/${name}/contents/${filename}?ref=${encodeURIComponent(entry.ref)}`, {
+                headers,
+                cache: "no-store",
+              });
+              if (contentRes.ok) {
+                const contentData = await contentRes.json();
+                const content = Buffer.from(contentData.content || "", "base64").toString("utf-8");
+                const fmMatch = content.match(/^---\s*\r?\n([\s\S]+?)\r?\n---/);
+                if (fmMatch) {
+                  const titleMatch = fmMatch[1].match(/^title:\s*(?:["'](.+?)["']|(.+?))\s*$/m);
+                  if (titleMatch) {
+                    const titleValue = (titleMatch[1] || titleMatch[2] || "").trim();
+                    if (titleValue) entry.title = titleValue;
+                  }
+                  
+                  const assignedMatch = fmMatch[1].match(/^assigned_to:\s*(?:["'](.+?)["']|(.+?))\s*$/m);
+                  if (assignedMatch) {
+                    const assignedValue = (assignedMatch[1] || assignedMatch[2] || "").trim();
+                    if (assignedValue) entry.assigned_to = assignedValue;
+                  }
+                }
+              }
+            } catch {
+              // ignore
+            }
+          }
+          
           map.set(filename, entry);
         }
       }

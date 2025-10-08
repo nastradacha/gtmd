@@ -47,6 +47,8 @@ export interface TestCase {
   prUrl?: string;
   // Frontmatter title extracted from the markdown file
   title?: string;
+  // Assigned user from frontmatter
+  assigned_to?: string;
 }
 
 export interface TestCaseFormData {

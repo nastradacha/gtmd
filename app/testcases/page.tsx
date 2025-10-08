@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { TestCase, TestCaseFormData } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import UserSelector from "@/components/UserSelector";
 
 export default function TestCasesPage() {
   const [files, setFiles] = useState<TestCase[]>([]);
@@ -28,6 +29,9 @@ export default function TestCasesPage() {
   const [selectedPending, setSelectedPending] = useState<boolean>(false);
   const [selectedPrUrl, setSelectedPrUrl] = useState<string | null>(null);
   const [folderFilter, setFolderFilter] = useState<string>("");
+  const [assignUser, setAssignUser] = useState<string>("");
+  const [assignmentMessage, setAssignmentMessage] = useState<string | null>(null);
+  const [selectedTestCase, setSelectedTestCase] = useState<TestCase | null>(null);
 
   const [formData, setFormData] = useState<TestCaseFormData>({
     title: "",
@@ -52,6 +56,44 @@ export default function TestCasesPage() {
     const parts = fullPath.split("/");
     return parts.slice(0, -1).join("/");
   };
+
+  // Parse frontmatter and body content
+  const parseFrontmatter = (markdown: string) => {
+    const fmMatch = markdown.match(/^---\s*\r?\n([\s\S]+?)\r?\n---\s*\r?\n([\s\S]*)$/);
+    if (!fmMatch) return { metadata: {}, body: markdown };
+    
+    const frontmatter = fmMatch[1];
+    const body = fmMatch[2];
+    const metadata: Record<string, string> = {};
+    
+    frontmatter.split('\n').forEach(line => {
+      const match = line.match(/^(\w+):\s*(?:["'](.+?)["']|(.+?))\s*$/);
+      if (match) {
+        const key = match[1];
+        const value = match[2] || match[3] || '';
+        metadata[key] = value.trim();
+      }
+    });
+    
+    return { metadata, body };
+  };
+
+  // Fetch test cases function
+  async function fetchTestCases() {
+    try {
+      const res = await fetch("/api/github/testcases");
+      if (!res.ok) throw new Error("Failed to fetch test cases");
+      const data = await res.json();
+      setFiles(data);
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  // Fetch test cases on mount
+  useEffect(() => {
+    fetchTestCases();
+  }, []);
 
   // Load latest run status for all files in list
   useEffect(() => {
@@ -103,23 +145,14 @@ export default function TestCasesPage() {
     };
   }, [lastPrNumber]);
 
-  async function fetchTestCases() {
-    try {
-      const res = await fetch("/api/github/testcases");
-      if (!res.ok) throw new Error("Failed to fetch test cases");
-      const data = await res.json();
-      setFiles(data);
-    } catch (e: any) {
-      setError(e.message);
-    }
-  }
-
   async function openFile(file: TestCase) {
     setContent(null);
     setSelectedFile(file.path);
     setSelectedRef(file.ref || null);
     setSelectedPending(!!file.pending);
     setSelectedPrUrl(file.prUrl || null);
+    setSelectedTestCase(file);
+    setAssignmentMessage(null);
     setError(null);
 
     try {
@@ -212,6 +245,56 @@ export default function TestCasesPage() {
       // refresh runs
       if (selectedFile) {
         await openFile({ path: selectedFile, name: selectedFile.split("/").pop() || selectedFile, url: "", ref: selectedRef || undefined, pending: selectedPending, prUrl: selectedPrUrl || undefined } as any);
+      }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function assignTestCase(type: "me" | "user" | "clear") {
+    if (!selectedTestCase || !selectedFile) return;
+    
+    try {
+      setActionLoading(true);
+      setAssignmentMessage(null);
+      
+      let assignee: string | null = null;
+      if (type === "me") {
+        const meRes = await fetch("/api/github/me");
+        if (!meRes.ok) throw new Error("Failed to fetch current user");
+        const me = await meRes.json();
+        assignee = me.login;
+      } else if (type === "user" && assignUser.trim()) {
+        assignee = assignUser.trim();
+      }
+      
+      const res = await fetch("/api/github/testcases/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: selectedFile,
+          assignee: assignee,
+          ref: selectedRef
+        }),
+      });
+      
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Failed to update assignment");
+      }
+      
+      const data = await res.json();
+      if (data.success) {
+        setAssignmentMessage(
+          assignee 
+            ? `Assigned to @${assignee}. PR #${data.prNumber} opened.` 
+            : `Unassigned. PR #${data.prNumber} opened.`
+        );
+        setAssignUser("");
+        // Refresh test cases list
+        await fetchTestCases();
       }
     } catch (e: any) {
       setError(e.message);
@@ -448,8 +531,13 @@ export default function TestCasesPage() {
                     selectedFile === f.path ? "bg-blue-50 border-blue-300" : "hover:bg-gray-50"
                   }`}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <div className="font-medium text-sm">{displayName(f)}</div>
+                    {f.assigned_to && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300">
+                        @{f.assigned_to}
+                      </span>
+                    )}
                     {f.pending && (
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300">
                         Pending review
@@ -525,7 +613,7 @@ export default function TestCasesPage() {
           </div>
 
           {content ? (
-            <div className="prose prose-sm max-w-none">
+            <div className="max-w-none">
               {editing ? (
                 <textarea
                   value={editText}
@@ -533,10 +621,132 @@ export default function TestCasesPage() {
                   className="w-full border rounded p-3 h-[55vh] font-mono text-sm"
                 />
               ) : (
-                <div className="bg-white">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm max-w-none">
-                    {content}
-                  </ReactMarkdown>
+                <div className="space-y-4">
+                  {(() => {
+                    const { metadata, body } = parseFrontmatter(content);
+                    return (
+                      <>
+                        {/* Metadata Card */}
+                        {Object.keys(metadata).length > 0 && (
+                          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+                            <div className="grid grid-cols-2 gap-3">
+                              {metadata.title && (
+                                <div className="col-span-2">
+                                  <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">Title</div>
+                                  <div className="text-lg font-bold text-gray-800">{metadata.title}</div>
+                                </div>
+                              )}
+                              {metadata.story_id && (
+                                <div>
+                                  <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">Story</div>
+                                  <div className="text-sm text-gray-700 font-medium">#{metadata.story_id}</div>
+                                </div>
+                              )}
+                              {metadata.priority && (
+                                <div>
+                                  <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">Priority</div>
+                                  <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${
+                                    metadata.priority === 'P1' ? 'bg-red-100 text-red-800' :
+                                    metadata.priority === 'P2' ? 'bg-orange-100 text-orange-800' :
+                                    'bg-yellow-100 text-yellow-800'
+                                  }`}>
+                                    {metadata.priority}
+                                  </span>
+                                </div>
+                              )}
+                              {metadata.suite && (
+                                <div>
+                                  <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">Suite</div>
+                                  <div className="text-sm text-gray-700">{metadata.suite}</div>
+                                </div>
+                              )}
+                              {metadata.created_by && (
+                                <div>
+                                  <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">Created By</div>
+                                  <div className="text-sm text-gray-700">@{metadata.created_by}</div>
+                                </div>
+                              )}
+                              {metadata.created && (
+                                <div className="col-span-2">
+                                  <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">Created</div>
+                                  <div className="text-xs text-gray-600">{new Date(metadata.created).toLocaleString()}</div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Body Content */}
+                        <div className="bg-white rounded-lg p-4 border prose prose-sm max-w-none">
+                          <ReactMarkdown 
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              h1: ({node, ...props}) => <h1 className="text-2xl font-bold text-gray-900 mb-3 pb-2 border-b" {...props} />,
+                              h2: ({node, ...props}) => <h2 className="text-xl font-semibold text-gray-800 mb-2 mt-4" {...props} />,
+                              h3: ({node, ...props}) => <h3 className="text-lg font-medium text-gray-700 mb-2 mt-3" {...props} />,
+                              p: ({node, ...props}) => <p className="text-gray-700 mb-3 leading-relaxed" {...props} />,
+                              ul: ({node, ...props}) => <ul className="list-disc list-inside space-y-1.5 mb-3 text-gray-700" {...props} />,
+                              ol: ({node, ...props}) => <ol className="list-decimal list-inside space-y-1.5 mb-3 text-gray-700" {...props} />,
+                              li: ({node, ...props}) => <li className="ml-2" {...props} />,
+                              code: ({node, inline, ...props}: any) => 
+                                inline ? 
+                                  <code className="bg-gray-100 text-red-600 px-1.5 py-0.5 rounded text-sm font-mono" {...props} /> :
+                                  <code className="block bg-gray-900 text-green-400 p-3 rounded-lg text-sm font-mono overflow-x-auto my-2" {...props} />,
+                              blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-blue-500 pl-4 italic text-gray-600 my-3" {...props} />,
+                            }}
+                          >
+                            {body}
+                          </ReactMarkdown>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Assignment controls */}
+              {!editing && selectedFile && selectedTestCase && (
+                <div className="mt-4 border-t pt-4">
+                  <div className="mb-2 text-sm font-medium">Assignment</div>
+                  {assignmentMessage && (
+                    <div className="text-sm text-green-700 mb-2 bg-green-50 p-2 rounded">{assignmentMessage}</div>
+                  )}
+                  {selectedTestCase.assigned_to && (
+                    <div className="text-sm text-gray-700 mb-2">
+                      <span className="font-medium">Currently assigned to:</span> @{selectedTestCase.assigned_to}
+                    </div>
+                  )}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <UserSelector
+                      value={assignUser}
+                      onChange={setAssignUser}
+                      placeholder="Type to search collaborators..."
+                      className="border rounded px-3 py-2 text-sm w-full"
+                    />
+                    <div className="flex gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => assignTestCase("me")}
+                        className="px-3 py-1.5 rounded border text-sm hover:bg-gray-50 disabled:opacity-50"
+                        disabled={actionLoading}
+                      >
+                        Assign to me
+                      </button>
+                      <button
+                        onClick={() => assignTestCase("user")}
+                        className="px-3 py-1.5 rounded border text-sm hover:bg-gray-50 disabled:opacity-50"
+                        disabled={actionLoading || !assignUser.trim()}
+                      >
+                        Assign
+                      </button>
+                      <button
+                        onClick={() => assignTestCase("clear")}
+                        className="px-3 py-1.5 rounded border text-sm hover:bg-gray-50 disabled:opacity-50"
+                        disabled={actionLoading}
+                      >
+                        Unassign
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 
