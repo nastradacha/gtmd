@@ -41,10 +41,25 @@ type MatrixResponse = {
   };
 };
 
+type SavedView = {
+  name: string;
+  filters: {
+    search: string;
+    label: string;
+    milestone: string;
+    suite: string;
+    priority: string;
+    folder: string;
+    assignee: string;
+  };
+};
+
 export default function TraceabilityPage() {
   const [data, setData] = useState<MatrixResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [cacheStatus, setCacheStatus] = useState<string>("");
+  const [refreshing, setRefreshing] = useState(false);
 
   // Filters
   const [search, setSearch] = useState("");
@@ -55,30 +70,116 @@ export default function TraceabilityPage() {
   const [folderFilter, setFolderFilter] = useState("");
   const [assigneeFilter, setAssigneeFilter] = useState("");
 
+  // Saved views
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [showSaveView, setShowSaveView] = useState(false);
+  const [newViewName, setNewViewName] = useState("");
+
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [selectedStory, setSelectedStory] = useState<MatrixStory | null>(null);
 
+  // Load saved views from localStorage
   useEffect(() => {
+    const stored = localStorage.getItem("traceability_saved_views");
+    if (stored) {
+      try {
+        setSavedViews(JSON.parse(stored));
+      } catch {}
+    }
+  }, []);
+
+  function fetchMatrix(nocache = false) {
     let mounted = true;
     setLoading(true);
     setError(null);
-    fetch("/api/traceability/matrix")
+    setCacheStatus("");
+    const url = nocache ? "/api/traceability/matrix?nocache=1" : "/api/traceability/matrix";
+    
+    fetch(url)
       .then(async (res) => {
         if (!res.ok) {
           const text = await res.text();
           throw new Error(text || `HTTP ${res.status}`);
         }
+        const cacheHeader = res.headers.get("X-Cache");
+        if (cacheHeader) setCacheStatus(cacheHeader);
         return res.json();
       })
       .then((json) => {
         if (mounted) setData(json);
       })
       .catch((e) => setError(e.message || "Failed to load matrix"))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setRefreshing(false);
+      });
     return () => {
       mounted = false;
     };
+  }
+
+  useEffect(() => {
+    fetchMatrix();
   }, []);
+
+  function refreshMatrix() {
+    setRefreshing(true);
+    fetchMatrix(true);
+  }
+
+  function saveCurrentView() {
+    if (!newViewName.trim()) {
+      alert("Please enter a view name");
+      return;
+    }
+
+    const newView: SavedView = {
+      name: newViewName.trim(),
+      filters: {
+        search,
+        label: labelFilter,
+        milestone: milestoneFilter,
+        suite: suiteFilter,
+        priority: priorityFilter,
+        folder: folderFilter,
+        assignee: assigneeFilter,
+      },
+    };
+
+    const updated = [...savedViews, newView];
+    setSavedViews(updated);
+    localStorage.setItem("traceability_saved_views", JSON.stringify(updated));
+    setNewViewName("");
+    setShowSaveView(false);
+  }
+
+  function loadView(view: SavedView) {
+    setSearch(view.filters.search);
+    setLabelFilter(view.filters.label);
+    setMilestoneFilter(view.filters.milestone);
+    setSuiteFilter(view.filters.suite);
+    setPriorityFilter(view.filters.priority);
+    setFolderFilter(view.filters.folder);
+    setAssigneeFilter(view.filters.assignee);
+  }
+
+  function deleteView(index: number) {
+    if (confirm(`Delete view "${savedViews[index].name}"?`)) {
+      const updated = savedViews.filter((_, i) => i !== index);
+      setSavedViews(updated);
+      localStorage.setItem("traceability_saved_views", JSON.stringify(updated));
+    }
+  }
+
+  function clearAllFilters() {
+    setSearch("");
+    setLabelFilter("");
+    setMilestoneFilter("");
+    setSuiteFilter("");
+    setPriorityFilter("");
+    setFolderFilter("");
+    setAssigneeFilter("");
+  }
 
   const filteredStories = useMemo(() => {
     if (!data) return [] as MatrixStory[];
@@ -337,7 +438,64 @@ export default function TraceabilityPage() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-4">Traceability</h1>
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-3xl font-bold">Traceability</h1>
+          <div className="flex items-center gap-3">
+            {cacheStatus && (
+              <span className={`text-xs px-2 py-1 rounded ${cacheStatus === "HIT" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+                Cache: {cacheStatus}
+              </span>
+            )}
+            <button
+              onClick={refreshMatrix}
+              disabled={refreshing}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-sm flex items-center gap-2"
+            >
+              {refreshing ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Refreshing...
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Saved Views */}
+        {savedViews.length > 0 && (
+          <div className="mb-4 p-3 bg-gray-50 rounded border">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-medium text-gray-700">Saved Views:</span>
+              {savedViews.map((view, index) => (
+                <div key={index} className="flex items-center gap-1">
+                  <button
+                    onClick={() => loadView(view)}
+                    className="px-3 py-1 bg-white border rounded text-sm hover:bg-blue-50"
+                  >
+                    {view.name}
+                  </button>
+                  <button
+                    onClick={() => deleteView(index)}
+                    className="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs"
+                    title="Delete view"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-2">
@@ -424,8 +582,22 @@ export default function TraceabilityPage() {
         </div>
 
         <div className="flex justify-between items-center">
-          <div className="text-sm text-gray-600">
-            Showing {filteredStories.length} of {data.stories.length} stories
+          <div className="flex items-center gap-3">
+            <div className="text-sm text-gray-600">
+              Showing {filteredStories.length} of {data.stories.length} stories
+            </div>
+            <button
+              onClick={clearAllFilters}
+              className="px-3 py-1 rounded border text-xs hover:bg-gray-50 text-gray-600"
+            >
+              Clear Filters
+            </button>
+            <button
+              onClick={() => setShowSaveView(true)}
+              className="px-3 py-1 rounded border text-xs hover:bg-gray-50 text-blue-600"
+            >
+              Save View
+            </button>
           </div>
           <div className="flex gap-2">
             <button
@@ -442,6 +614,38 @@ export default function TraceabilityPage() {
             </button>
           </div>
         </div>
+
+        {/* Save View Modal */}
+        {showSaveView && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowSaveView(false)}>
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-semibold mb-4">Save Current View</h3>
+              <input
+                type="text"
+                value={newViewName}
+                onChange={(e) => setNewViewName(e.target.value)}
+                placeholder="Enter view name (e.g., P1 Tests Only)"
+                className="w-full border rounded px-3 py-2 mb-4"
+                autoFocus
+                onKeyDown={(e) => e.key === "Enter" && saveCurrentView()}
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setShowSaveView(false)}
+                  className="px-4 py-2 border rounded hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveCurrentView}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Matrix Table */}

@@ -1,0 +1,63 @@
+name: Validate Test Cases
+
+on:
+  pull_request:
+    paths:
+      - 'qa-testcases/**/*.md'
+  push:
+    branches:
+      - main
+    paths:
+      - 'qa-testcases/**/*.md'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    name: Validate Test Case Frontmatter
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Get changed test case files
+        id: changed-files
+        uses: tj-actions/changed-files@v41
+        with:
+          files: |
+            qa-testcases/**/*.md
+      
+      - name: Validate changed test cases
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          echo "Changed test case files:"
+          echo "${{ steps.changed-files.outputs.all_changed_files }}"
+          
+          # Make validation script executable
+          chmod +x .github/scripts/validate-testcases.js
+          
+          # Run validation on changed files
+          node .github/scripts/validate-testcases.js ${{ steps.changed-files.outputs.all_changed_files }}
+      
+      - name: No test cases changed
+        if: steps.changed-files.outputs.any_changed != 'true'
+        run: |
+          echo "✅ No test case files were changed in this PR"
+      
+      - name: Comment PR with validation results
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **Test Case Validation Failed**\n\nOne or more test cases have invalid frontmatter. Please check the workflow logs for details.\n\n**Common issues:**\n- Missing required fields: `title`, `steps`, `expected`\n- Invalid `priority` (must be P1, P2, or P3)\n- Invalid `status` (must be Draft, Ready, Approved, or Obsolete)\n- Unknown frontmatter fields\n\nSee the [Schema v2 documentation](../blob/main/docs/test-case-schema.md) for details.'
+            })
