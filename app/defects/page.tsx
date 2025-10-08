@@ -165,7 +165,20 @@ export default function DefectsPage() {
     setError(null);
 
     try {
-      const body = `## Defect Details
+      const yamlLines: string[] = ["---"]; 
+      const storyIdTrim = (formData.storyId || "").trim();
+      const testCaseTrim = (formData.testCaseId || "").trim();
+      if (storyIdTrim) {
+        yamlLines.push(`story_id: "${storyIdTrim}"`);
+      }
+      if (testCaseTrim) {
+        yamlLines.push(`test_case: "${testCaseTrim}"`);
+      }
+      yamlLines.push("---");
+
+      const body = `${yamlLines.join("\n")}
+
+## Defect Details
 
 **Severity**: ${formData.severity}
 **Priority**: ${formData.priority}

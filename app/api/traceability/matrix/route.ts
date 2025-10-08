@@ -1,6 +1,10 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
+// Simple in-memory cache for the matrix payload
+let matrixCache: { data: any; ts: number } | null = null;
+const MATRIX_CACHE_TTL_MS = 60_000; // 60 seconds
+
 function parseRepoEnv(repoEnv: string) {
   let owner: string | undefined;
   let name: string | undefined;
@@ -56,6 +60,15 @@ export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
+  }
+
+  const { searchParams } = new URL(req.url);
+  const nocache = /^(1|true)$/i.test(searchParams.get("nocache") || "");
+  if (!nocache && matrixCache && Date.now() - matrixCache.ts < MATRIX_CACHE_TTL_MS) {
+    return new Response(
+      JSON.stringify(matrixCache.data, null, 2),
+      { status: 200, headers: { "Content-Type": "application/json", "X-Cache": "HIT" } }
+    );
   }
 
   const STORIES_REPO = process.env.STORIES_REPO;
@@ -313,9 +326,11 @@ export async function GET(req: Request) {
       });
     }
 
+    const payload = { stories: storiesOut, gaps };
+    matrixCache = { data: payload, ts: Date.now() };
     return new Response(
-      JSON.stringify({ stories: storiesOut, gaps }, null, 2),
-      { status: 200, headers: { "Content-Type": "application/json" } }
+      JSON.stringify(payload, null, 2),
+      { status: 200, headers: { "Content-Type": "application/json", "X-Cache": "MISS" } }
     );
   } catch (e: any) {
     return new Response(JSON.stringify({ error: e.message || "Failed to build matrix" }), { status: 500 });
