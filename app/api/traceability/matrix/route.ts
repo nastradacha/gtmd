@@ -147,6 +147,8 @@ export async function GET(req: Request) {
       title?: string;
       storyId?: string;
       assigned_to?: string;
+      suite?: string;
+      priority?: string;
     };
 
     const testCases: TestCaseLite[] = testFiles.map((p) => ({
@@ -172,6 +174,8 @@ export async function GET(req: Request) {
             if (meta.title) tc.title = meta.title;
             if (meta.assigned_to) tc.assigned_to = meta.assigned_to;
             if (meta.story_id) tc.storyId = meta.story_id;
+            if (meta.suite) tc.suite = meta.suite;
+            if (meta.priority) tc.priority = meta.priority;
           } catch {}
         })
       );
@@ -273,6 +277,8 @@ export async function GET(req: Request) {
           path: tc.path,
           title: tc.title || tc.name,
           assigned_to: tc.assigned_to || null,
+          suite: tc.suite || null,
+          priority: tc.priority || null,
           latestRun: latest,
           defects: defectsForTest.map((d) => ({ number: d.number, title: d.title, state: d.state, url: d.html_url })),
           url: tc.url,
@@ -296,6 +302,8 @@ export async function GET(req: Request) {
         title: s.title,
         url: s.html_url,
         assignees: s.assignees?.map((a: any) => a.login) || [],
+        labels: (s.labels || []).map((l: any) => ({ name: l.name, color: l.color })),
+        milestone: s.milestone?.title || null,
         tests: testsDetailed,
         defects: defectsForStory,
         metrics: {
