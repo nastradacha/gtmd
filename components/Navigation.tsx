@@ -20,6 +20,7 @@ export default function Navigation() {
     { href: "/dashboard", label: "Dashboard" },
     { href: "/stories", label: "Stories" },
     { href: "/testcases", label: "Test Cases" },
+    { href: "/runs", label: "Runs" },
     { href: "/defects", label: "Defects" },
     { href: "/traceability", label: "Traceability" },
     { href: "/my-work", label: "My Work" },
