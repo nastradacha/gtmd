@@ -453,6 +453,356 @@
  
  ---
  
+ ## 🔧 9. Improvement Backlog (Prioritized)
+
+ ### P1 — High Priority
+
+ #### 9.1 Test Case Frontmatter Schema v2
+ - **As a** QA lead  
+ - **I want** a standardized and richer frontmatter schema for test cases  
+ - **So that** cases are consistent, parseable, and training-friendly.
+
+ **Acceptance Criteria**
+ - Define schema keys: `title`, `story_id`, `suite`, `priority`, `component`, `preconditions`, `data`, `steps`, `expected`, `env`, `app_version`, `owner`, `status` (Draft/Ready/Approved/Obsolete).  
+ - Unify naming across code to use `story_id` consistently.  
+ - Update `app/api/github/testcases/route.ts` parser to read new fields.  
+ - Update UI to display badges for `suite`, `priority`, `component`, `status`.  
+ - Backward compatible with existing cases (missing fields allowed).
+
+ **Priority:** P1  
+ **Story Points:** 5  
+ **Status:** Planned
+
+ ----
+
+ #### 9.2 Bulk Run Sessions UI
+ - **As a** tester  
+ - **I want** to create a run session and execute a set of tests in bulk  
+ - **So that** I can record outcomes efficiently.
+
+ **Acceptance Criteria**
+ - New page `app/runs/page.tsx` to create/select a session (by suite/story/component).  
+ - Record Pass/Fail per test with optional notes.  
+ - Extend run payload with `environment`, `browser`, `build`, `attachments` (URLs).  
+ - Persist under `qa-runs/<encoded-test-path>/run-<timestamp>.json` and update latest index (see 9.5).  
+ - Export session results to CSV.
+
+ **Priority:** P1  
+ **Story Points:** 8  
+ **Status:** Planned
+
+ ----
+
+ #### 9.3 CI Validation for Schemas
+ - **As an** instructor  
+ - **I want** a CI job that validates test case frontmatter and defect YAML  
+ - **So that** students learn to keep assets correct.
+
+ **Acceptance Criteria**
+ - Add `.github/workflows/validate.yml` running on PRs.  
+ - Validate `qa-testcases/**.md` frontmatter against a JSONSchema/Zod schema.  
+ - Validate defect issues contain YAML with `story_id` and optional `test_case`.  
+ - CI fails with helpful messages when invalid; docs in README.
+
+ **Priority:** P1  
+ **Story Points:** 3  
+ **Status:** Planned
+
+ ----
+
+ #### 9.4 Traceability Saved Views & Refresh
+ - **As a** QA lead  
+ - **I want** to save filter presets and quickly refresh the matrix  
+ - **So that** I can switch contexts fast and avoid stale data.
+
+ **Acceptance Criteria**
+ - Save current filters as a named view (localStorage or per-user).  
+ - Dropdown to apply saved views on `app/traceability/page.tsx`.  
+ - Add "Refresh (nocache)" button that calls `/api/traceability/matrix?nocache=1`.  
+ - Visual indicator for cache status via `X-Cache` response header.
+
+ **Priority:** P1  
+ **Story Points:** 3  
+ **Status:** Planned
+
+ ----
+
+ #### 9.5 Latest Run Index per Test
+ - **As an** engineer  
+ - **I want** a lightweight index of the latest run per test  
+ - **So that** the matrix loads quickly without scanning many files.
+
+ **Acceptance Criteria**
+ - Maintain `qa-runs/<encoded-test-path>/latest.json` mirrored on each run.  
+ - Aggregator reads `latest.json` when present; falls back to scanning if missing.  
+ - Backfill script/route to generate indices for existing runs.  
+ - Document index contract in README.
+
+ **Priority:** P1  
+ **Story Points:** 5  
+ **Status:** Planned
+
+ ---
+
+ ### P2 — Medium Priority
+
+ #### 9.6 GraphQL Batching & Pagination for Matrix
+ - **As an** engineer  
+ - **I want** to fetch stories/defects with fewer API calls  
+ - **So that** we avoid rate limits at scale.
+
+ **Acceptance Criteria**
+ - Replace REST calls in `app/api/traceability/matrix/route.ts` with GitHub GraphQL where beneficial.  
+ - Support pagination beyond 100 items (milestones, labels, assignees).  
+ - Add conditional requests (ETag / If-None-Match) where REST is kept.  
+ - Surface `X-RateLimit-Remaining` in logs/response headers.
+
+ **Priority:** P2  
+ **Story Points:** 5  
+ **Status:** Planned
+
+ ----
+
+ #### 9.7 Coverage Thresholds & Alerts
+ - **As a** QA lead  
+ - **I want** to set minimum coverage and highlight gaps  
+ - **So that** we act on under-tested stories.
+
+ **Acceptance Criteria**
+ - Settings for coverage threshold (e.g., 60%).  
+ - Matrix highlights stories below threshold; filter to show only at-risk.  
+ - Export CSV includes a `coverage_status` column.
+
+ **Priority:** P2  
+ **Story Points:** 2  
+ **Status:** Planned
+
+ ----
+
+ #### 9.8 Run History Trend in Drill-down
+ - **As a** tester  
+ - **I want** to see run history per test  
+ - **So that** I can spot flaky or regressing tests.
+
+ **Acceptance Criteria**
+ - Drill-down shows last N results (sparkline: pass/fail/no-run).  
+ - Link to open the runs folder for the test on GitHub.  
+ - Efficient loading via latest index and optional lazy fetch.
+
+ **Priority:** P2  
+ **Story Points:** 5  
+ **Status:** Planned
+
+ ----
+
+ #### 9.9 Defect Issue Template
+ - **As a** tester  
+ - **I want** a GitHub issue template for defects  
+ - **So that** linking fields are always present.
+
+ **Acceptance Criteria**
+ - Add `.github/ISSUE_TEMPLATE/defect.yml` with `story_id`, `test_case`, `severity`, `priority`.  
+ - Template renders in GitHub UI; instructions shown to students.  
+ - README documents how to use the template.
+
+ **Priority:** P2  
+ **Story Points:** 2  
+ **Status:** Planned
+
+ ----
+
+ #### 9.10 Create Defect from Failure (Pre-filled)
+ - **As a** tester  
+ - **I want** to open a pre-filled defect from a failing test  
+ - **So that** I can report quickly and consistently.
+
+ **Acceptance Criteria**
+ - On failing test rows, show "Create Defect" action.  
+ - Pre-fill title/body/YAML with story/test context and last run notes.  
+ - After creation, link defect back in UI immediately.
+
+ **Priority:** P2  
+ **Story Points:** 3  
+ **Status:** Planned
+
+ ----
+
+ #### 9.11 Instructor Dashboard (MVP)
+ - **As an** instructor  
+ - **I want** to see each student’s testing activity  
+ - **So that** I can coach and grade effectively.
+
+ **Acceptance Criteria**
+ - Table per user: tests authored, runs executed, defects logged, on-time submissions.  
+ - Filters by week/sprint.  
+ - Export CSV for grading.
+
+ **Priority:** P2  
+ **Story Points:** 8  
+ **Status:** Planned
+
+ ----
+
+ #### 9.12 Settings UI
+ - **As an** admin  
+ - **I want** to configure repos, defaults, and thresholds  
+ - **So that** teams can self-serve setup.
+
+ **Acceptance Criteria**
+ - New page `app/settings/page.tsx` for `STORIES_REPO`, `TESTCASES_REPO`, coverage threshold, default labels.  
+ - Validate access to repos; store per-project config file in repo.  
+ - Protect with role (see 9.13).
+
+ **Priority:** P2  
+ **Story Points:** 3  
+ **Status:** Planned
+
+ ----
+
+ #### 9.13 Role-Based Access Control (RBAC)
+ - **As an** admin  
+ - **I want** to restrict sensitive actions by role  
+ - **So that** the workflow is safe and orderly.
+
+ **Acceptance Criteria**
+ - Roles: Tester, Test Lead, Instructor/Admin.  
+ - Guard mutation routes (create defect, log run, settings).  
+ - UI hides actions when not permitted.
+
+ **Priority:** P2  
+ **Story Points:** 5  
+ **Status:** Planned
+
+ ---
+
+ ### P3 — Low Priority
+
+ #### 9.14 Step-level Results in Runs
+ - **As a** tester  
+ - **I want** to record step outcomes  
+ - **So that** failed expectations are explicit.
+
+ **Acceptance Criteria**
+ - Optional `steps: [{ name, result, notes }]` in run JSON.  
+ - UI for marking per-step pass/fail and notes.  
+ - Aggregator counts step failures in drill-down.
+
+ **Priority:** P3  
+ **Story Points:** 5  
+ **Status:** Planned
+
+ ----
+
+ #### 9.15 Scheduled Report to Slack/Teams
+ - **As a** QA manager  
+ - **I want** daily quality summaries in chat  
+ - **So that** the team stays aligned.
+
+ **Acceptance Criteria**
+ - GitHub Action runs daily, calls matrix API (nocache).  
+ - Posts coverage and defect summary to Slack/Teams webhook.  
+ - Links to `/traceability` and CSV.
+
+ **Priority:** P3  
+ **Story Points:** 5  
+ **Status:** Planned
+
+ ----
+
+ #### 9.16 CI Results Ingestion (JUnit/Allure)
+ - **As an** automation engineer  
+ - **I want** to import CI test results  
+ - **So that** manual and automated coverage are unified.
+
+ **Acceptance Criteria**
+ - Endpoint to receive JUnit/Allure, map to `test_case` via frontmatter ID.  
+ - Write run JSONs under `qa-runs/` with `executed_by` = CI user.  
+ - Flag automated runs in UI.
+
+ **Priority:** P3  
+ **Story Points:** 8  
+ **Status:** Planned
+
+ ----
+
+ #### 9.17 GitHub PR Checks Integration
+ - **As a** developer  
+ - **I want** test status displayed on PRs  
+ - **So that** I know quality before merge.
+
+ **Acceptance Criteria**
+ - Publish Checks/Status for target PR using matrix data.  
+ - Link back to `/traceability`.
+
+ **Priority:** P3  
+ **Story Points:** 5  
+ **Status:** Planned
+
+ ----
+
+ #### 9.18 Data Fetching Enhancements (SWR/React Query)
+ - **As an** engineer  
+ - **I want** consistent caching and retries  
+ - **So that** pages are resilient and fast.
+
+ **Acceptance Criteria**
+ - Adopt SWR/React Query across `app/**` for data fetching.  
+ - Loading and error states standardized.  
+ - Cache invalidation on mutations.
+
+ **Priority:** P3  
+ **Story Points:** 5  
+ **Status:** Planned
+
+ ----
+
+ #### 9.19 Accessibility & Keyboard Shortcuts
+ - **As a** keyboard user  
+ - **I want** focus-trapped modals and shortcuts  
+ - **So that** I can navigate efficiently.
+
+ **Acceptance Criteria**
+ - Drill-down panel traps focus; ESC closes; restore focus to trigger.  
+ - Shortcut: `/` focuses search on list pages; `?` shows help.  
+ - a11y checks added to CI.
+
+ **Priority:** P3  
+ **Story Points:** 3  
+ **Status:** Planned
+
+ ----
+
+ #### 9.20 Sample Repo Seed & Coach Mode
+ - **As an** instructor  
+ - **I want** a sandbox repo and guided tips  
+ - **So that** students can practice safely.
+
+ **Acceptance Criteria**
+ - Script/template to create a demo repo with stories, tests, defects.  
+ - In-app tour and context tips (coach mode).  
+ - Toggle coach mode per user.
+
+ **Priority:** P3  
+ **Story Points:** 8  
+ **Status:** Planned
+
+ ----
+
+ #### 9.21 Two-way Linking via Comments
+ - **As a** tester  
+ - **I want** the system to comment links back to related items  
+ - **So that** context is preserved everywhere.
+
+ **Acceptance Criteria**
+ - On defect creation, optionally comment with test/story links.  
+ - On run failure, optionally comment on story with failure summary.
+
+ **Priority:** P3  
+ **Story Points:** 3  
+ **Status:** Planned
+
+ ---
+
  ## 📎 Summary Table
 
  | Area | Stories | Points | Priority |
