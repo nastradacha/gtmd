@@ -75,10 +75,15 @@ export default function TraceabilityPage() {
   const [showSaveView, setShowSaveView] = useState(false);
   const [newViewName, setNewViewName] = useState("");
 
+  // Coverage threshold
+  const [coverageThreshold, setCoverageThreshold] = useState<number>(60);
+  const [showAtRiskOnly, setShowAtRiskOnly] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [selectedStory, setSelectedStory] = useState<MatrixStory | null>(null);
 
-  // Load saved views from localStorage
+  // Load saved views and settings from localStorage
   useEffect(() => {
     const stored = localStorage.getItem("traceability_saved_views");
     if (stored) {
@@ -86,7 +91,17 @@ export default function TraceabilityPage() {
         setSavedViews(JSON.parse(stored));
       } catch {}
     }
+    
+    const threshold = localStorage.getItem("coverage_threshold");
+    if (threshold) {
+      setCoverageThreshold(parseInt(threshold, 10));
+    }
   }, []);
+
+  // Save threshold to localStorage when changed
+  useEffect(() => {
+    localStorage.setItem("coverage_threshold", String(coverageThreshold));
+  }, [coverageThreshold]);
 
   function fetchMatrix(nocache = false) {
     let mounted = true;
@@ -214,6 +229,15 @@ export default function TraceabilityPage() {
             // We'll check test-level after filtering tests
           }
         }
+        
+        // At-risk filter: show only stories below coverage threshold
+        if (showAtRiskOnly) {
+          const coverage = s.metrics.testCount > 0 
+            ? Math.round((s.metrics.pass / s.metrics.testCount) * 100)
+            : 0;
+          if (coverage >= coverageThreshold && s.metrics.testCount > 0) return false;
+        }
+        
         return true;
       })
       .map((s) => {
@@ -281,6 +305,10 @@ export default function TraceabilityPage() {
       "story_assignees",
       "story_labels",
       "story_milestone",
+      "test_count",
+      "pass_count",
+      "coverage_percent",
+      "coverage_status",
       "test_path",
       "test_title",
       "test_url",
@@ -303,6 +331,15 @@ export default function TraceabilityPage() {
     for (const s of list) {
       const assigneesStr = (s.assignees || []).join("; ");
       const labelsStr = (s.labels || []).map((l) => l.name).join("; ");
+      const coverage = s.metrics.testCount > 0 
+        ? Math.round((s.metrics.pass / s.metrics.testCount) * 100)
+        : 0;
+      const coverageStatus = s.metrics.testCount === 0 
+        ? "NO_TESTS"
+        : coverage < coverageThreshold 
+          ? "AT_RISK"
+          : "OK";
+      
       if (s.tests.length === 0) {
         const row = [
           s.number,
@@ -312,6 +349,10 @@ export default function TraceabilityPage() {
           assigneesStr,
           labelsStr,
           s.milestone || "",
+          s.metrics.testCount,
+          s.metrics.pass,
+          coverage,
+          coverageStatus,
           "",
           "",
           "",
@@ -339,6 +380,10 @@ export default function TraceabilityPage() {
             assigneesStr,
             labelsStr,
             s.milestone || "",
+            s.metrics.testCount,
+            s.metrics.pass,
+            coverage,
+            coverageStatus,
             t.path,
             t.title,
             t.url,
@@ -468,8 +513,47 @@ export default function TraceabilityPage() {
                 </>
               )}
             </button>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="px-4 py-2 border rounded hover:bg-gray-50 text-sm flex items-center gap-2"
+              title="Coverage Settings"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Settings
+            </button>
           </div>
         </div>
+
+        {/* Coverage Alert Banner */}
+        {data && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-blue-900">
+                Coverage Threshold: {coverageThreshold}%
+              </span>
+              <span className="text-sm text-blue-700">
+                {data.stories.filter(s => {
+                  const coverage = s.metrics.testCount > 0 
+                    ? Math.round((s.metrics.pass / s.metrics.testCount) * 100)
+                    : 0;
+                  return s.metrics.testCount === 0 || coverage < coverageThreshold;
+                }).length} stories at risk
+              </span>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAtRiskOnly}
+                onChange={(e) => setShowAtRiskOnly(e.target.checked)}
+                className="rounded"
+              />
+              <span className="text-sm font-medium text-blue-900">Show at-risk only</span>
+            </label>
+          </div>
+        )}
 
         {/* Saved Views */}
         {savedViews.length > 0 && (
@@ -646,6 +730,71 @@ export default function TraceabilityPage() {
             </div>
           </div>
         )}
+
+        {/* Settings Modal */}
+        {showSettings && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowSettings(false)}>
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-semibold mb-4">Coverage Settings</h3>
+              
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-2">
+                  Coverage Threshold (%)
+                </label>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={coverageThreshold}
+                    onChange={(e) => setCoverageThreshold(parseInt(e.target.value, 10))}
+                    className="flex-1"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={coverageThreshold}
+                    onChange={(e) => setCoverageThreshold(Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)))}
+                    className="w-20 border rounded px-3 py-2 text-center"
+                  />
+                  <span className="text-sm font-medium">%</span>
+                </div>
+                <p className="text-xs text-gray-600 mt-2">
+                  Stories with pass rate below this threshold will be highlighted as at-risk
+                </p>
+              </div>
+
+              <div className="bg-gray-50 p-3 rounded mb-4">
+                <h4 className="text-sm font-semibold mb-2">Coverage Status Legend:</h4>
+                <div className="space-y-1 text-xs">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-red-100 border border-red-300 rounded"></div>
+                    <span><strong>AT_RISK:</strong> Pass rate below {coverageThreshold}%</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-yellow-100 border border-yellow-300 rounded"></div>
+                    <span><strong>NO_TESTS:</strong> Story has no test cases</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-green-100 border border-green-300 rounded"></div>
+                    <span><strong>OK:</strong> Pass rate at or above {coverageThreshold}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Matrix Table */}
@@ -656,8 +805,19 @@ export default function TraceabilityPage() {
           <div className="col-span-3">Defects</div>
           <div className="col-span-2">Coverage</div>
         </div>
-        {filteredStories.map((s) => (
-          <div key={s.number} className="border-b">
+        {filteredStories.map((s) => {
+          const coverage = s.metrics.testCount > 0 
+            ? Math.round((s.metrics.pass / s.metrics.testCount) * 100)
+            : 0;
+          const isAtRisk = s.metrics.testCount === 0 || coverage < coverageThreshold;
+          const bgColor = s.metrics.testCount === 0 
+            ? "bg-yellow-50" 
+            : coverage < coverageThreshold 
+              ? "bg-red-50" 
+              : "";
+          
+          return (
+          <div key={s.number} className={`border-b ${bgColor}`}>
             <div className="grid grid-cols-12 px-4 py-3 items-center gap-3">
               <div className="col-span-4">
                 <div className="flex items-center gap-2">
@@ -823,7 +983,8 @@ export default function TraceabilityPage() {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Gaps Section */}
