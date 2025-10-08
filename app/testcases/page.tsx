@@ -39,9 +39,19 @@ export default function TestCasesPage() {
     folder: "manual/General",
   });
 
-  useEffect(() => {
-    fetchTestCases();
-  }, []);
+  // Pretty display name: use frontmatter title if available, else clean filename
+  const displayName = (file: TestCase) => {
+    if (file.title) return file.title;
+    const base = file.name.replace(/\.md$/i, "");
+    const noPrefix = base.replace(/^TC-\d+-/, "");
+    return noPrefix.replace(/[-_]+/g, " ");
+  };
+
+  // Extract folder path only (without filename)
+  const folderPath = (fullPath: string) => {
+    const parts = fullPath.split("/");
+    return parts.slice(0, -1).join("/");
+  };
 
   // Load latest run status for all files in list
   useEffect(() => {
@@ -439,7 +449,7 @@ export default function TestCasesPage() {
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <div className="font-medium text-sm">{f.name}</div>
+                    <div className="font-medium text-sm">{displayName(f)}</div>
                     {f.pending && (
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300">
                         Pending review
@@ -457,7 +467,7 @@ export default function TestCasesPage() {
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">{f.path}</div>
+                  <div className="text-xs text-gray-500 mt-1">{folderPath(f.path)}</div>
                 </button>
               ))}
 

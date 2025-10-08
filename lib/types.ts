@@ -45,6 +45,8 @@ export interface TestCase {
   // Optional PR context for pending files
   prNumber?: number;
   prUrl?: string;
+  // Frontmatter title extracted from the markdown file
+  title?: string;
 }
 
 export interface TestCaseFormData {

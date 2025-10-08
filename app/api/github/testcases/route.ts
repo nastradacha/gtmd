@@ -94,9 +94,36 @@ export async function GET(req: Request) {
         path: pathOnly,
         name: nameOnly,
         url: `https://github.com/${owner}/${name}/blob/main/${pathOnly}`,
+        title: null,
       });
     }
   }
+
+  // Parse frontmatter title for each file (sample up to 50 to avoid rate limits)
+  const paths = Array.from(map.keys()).slice(0, 50);
+  await Promise.all(
+    paths.map(async (p) => {
+      try {
+        const res = await fetch(`https://api.github.com/repos/${owner}/${name}/contents/${p}`, {
+          headers,
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const content = Buffer.from(data.content || "", "base64").toString("utf-8");
+        const fmMatch = content.match(/^---\s*\n([\s\S]+?)\n---/);
+        if (fmMatch) {
+          const titleMatch = fmMatch[1].match(/^title:\s*["']?(.+?)["']?\s*$/m);
+          if (titleMatch) {
+            const entry = map.get(p);
+            if (entry) entry.title = titleMatch[1].trim();
+          }
+        }
+      } catch {
+        // ignore
+      }
+    })
+  );
 
   // Also include pending files from open PRs (added/modified under qa-testcases/manual)
   const prsRes = await fetch(`https://api.github.com/repos/${owner}/${name}/pulls?state=open&per_page=50`, {
