@@ -36,8 +36,8 @@ export async function GET(req: Request) {
       return new Response(JSON.stringify({ error: "path is required" }), { status: 400 });
     }
 
-    const safePath = path.replace(/[^a-zA-Z0-9/_-]/g, "-");
-    const runDir = `qa-runs/${safePath.replace(/\//g, "__")}`;
+    // Encode path: replace / with __ (dots are allowed in filenames)
+    const runDir = `qa-runs/${path.replace(/\//g, "__")}`;
 
     const listRes = await fetch(
       `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(runDir)}`,

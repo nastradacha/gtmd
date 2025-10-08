@@ -51,8 +51,8 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const ms = now.getTime();
     const timestamp = now.toISOString();
-    const safePath = path.replace(/[^a-zA-Z0-9/_-]/g, "-");
-    const runDir = `qa-runs/${safePath.replace(/\//g, "__")}`;
+    // Encode path: replace / with __ (dots are allowed in filenames)
+    const runDir = `qa-runs/${path.replace(/\//g, "__")}`;
     const runFilename = `run-${ms}.json`;
     const runPath = `${runDir}/${runFilename}`;
 
@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        title: `Test Run: ${result.toUpperCase()} - ${safePath}`,
+        title: `Test Run: ${result.toUpperCase()} - ${path}`,
         body: `Automated test run logged by ${login} for ${path} at ${timestamp}. Result: ${result.toUpperCase()}.`,
         head: branchName,
         base: "main",
