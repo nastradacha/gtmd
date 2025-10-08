@@ -82,6 +82,8 @@ export default function TraceabilityPage() {
 
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [selectedStory, setSelectedStory] = useState<MatrixStory | null>(null);
+  const [testRunHistory, setTestRunHistory] = useState<Record<string, any[]>>({});
+  const [loadingHistory, setLoadingHistory] = useState<Record<string, boolean>>({});
 
   // Load saved views and settings from localStorage
   useEffect(() => {
@@ -194,6 +196,24 @@ export default function TraceabilityPage() {
     setPriorityFilter("");
     setFolderFilter("");
     setAssigneeFilter("");
+  }
+
+  async function fetchTestRunHistory(testPath: string) {
+    if (testRunHistory[testPath] || loadingHistory[testPath]) return;
+    
+    setLoadingHistory(prev => ({ ...prev, [testPath]: true }));
+    
+    try {
+      const res = await fetch(`/api/github/testcases/runs?path=${encodeURIComponent(testPath)}&limit=10`);
+      if (res.ok) {
+        const data = await res.json();
+        setTestRunHistory(prev => ({ ...prev, [testPath]: data.runs || [] }));
+      }
+    } catch (err) {
+      console.error("Failed to fetch run history:", err);
+    } finally {
+      setLoadingHistory(prev => ({ ...prev, [testPath]: false }));
+    }
   }
 
   const filteredStories = useMemo(() => {
@@ -1110,7 +1130,12 @@ export default function TraceabilityPage() {
                 <div className="px-3 py-2 border-b text-sm font-semibold bg-gray-50">Tests</div>
                 <div className="p-3 space-y-2">
                   {selectedStory.tests.length ? (
-                    selectedStory.tests.map((t) => (
+                    selectedStory.tests.map((t) => {
+                      const history = testRunHistory[t.path] || [];
+                      const isLoadingHistory = loadingHistory[t.path];
+                      const runsFolder = `https://github.com/${process.env.NEXT_PUBLIC_TESTCASES_REPO}/tree/main/qa-runs/${t.path.replace(/\//g, "__")}`;
+                      
+                      return (
                       <div key={t.path} className="border rounded p-3">
                         <div className="flex items-center justify-between">
                           <div className="min-w-0">
@@ -1165,8 +1190,85 @@ export default function TraceabilityPage() {
                             ))}
                           </div>
                         )}
+                        
+                        {/* Run History */}
+                        <div className="mt-3 pt-3 border-t">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-medium text-gray-700">Run History</span>
+                            <div className="flex items-center gap-2">
+                              <a
+                                href={runsFolder}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs text-blue-600 hover:underline"
+                              >
+                                View on GitHub →
+                              </a>
+                              {!history.length && !isLoadingHistory && (
+                                <button
+                                  onClick={() => fetchTestRunHistory(t.path)}
+                                  className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                >
+                                  Load History
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {isLoadingHistory ? (
+                            <div className="text-xs text-gray-500">Loading...</div>
+                          ) : history.length > 0 ? (
+                            <div>
+                              {/* Sparkline */}
+                              <div className="flex items-center gap-1 mb-2">
+                                {history.slice(0, 10).reverse().map((run, idx) => (
+                                  <div
+                                    key={idx}
+                                    className={`w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold ${
+                                      run.result === "pass"
+                                        ? "bg-green-500 text-white"
+                                        : run.result === "fail"
+                                        ? "bg-red-500 text-white"
+                                        : "bg-gray-300 text-gray-700"
+                                    }`}
+                                    title={`${run.result.toUpperCase()} - ${new Date(run.executed_at).toLocaleString()}`}
+                                  >
+                                    {run.result === "pass" ? "✓" : run.result === "fail" ? "✗" : "−"}
+                                  </div>
+                                ))}
+                                <span className="text-xs text-gray-500 ml-2">
+                                  ({history.length} run{history.length !== 1 ? "s" : ""})
+                                </span>
+                              </div>
+                              
+                              {/* Trend indicator */}
+                              {history.length >= 3 && (
+                                <div className="text-xs">
+                                  {(() => {
+                                    const recent3 = history.slice(0, 3);
+                                    const passCount = recent3.filter(r => r.result === "pass").length;
+                                    const failCount = recent3.filter(r => r.result === "fail").length;
+                                    
+                                    if (passCount === 3) {
+                                      return <span className="text-green-700">✓ Stable (3/3 passing)</span>;
+                                    } else if (failCount === 3) {
+                                      return <span className="text-red-700">⚠ Failing (0/3 passing)</span>;
+                                    } else if (failCount >= 2) {
+                                      return <span className="text-orange-600">⚠ Flaky or regressing</span>;
+                                    } else {
+                                      return <span className="text-gray-600">~ Mixed results</span>;
+                                    }
+                                  })()}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-gray-500">No run history available</div>
+                          )}
+                        </div>
                       </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <div className="text-sm text-gray-600">No tests available.</div>
                   )}
