@@ -92,13 +92,42 @@ All test cases are automatically validated on pull requests using GitHub Actions
 4. **Unknown fields** - Warns about fields not in the schema (non-blocking)
 5. **Body sections** - Warns if steps/expected are only in frontmatter but not in body (non-blocking)
 
+## Multi-Line Field Formatting
+
+**IMPORTANT:** For `steps`, `expected`, and `preconditions`, use YAML block scalar syntax for better readability:
+
+### Option 1: Using Pipe `|` (Recommended)
+```yaml
+steps: |
+  1. Navigate to login page
+  2. Enter username
+  3. Enter password
+  4. Click login button
+expected: |
+  - User is logged in
+  - Redirected to dashboard
+  - Welcome message displayed
+```
+
+### Option 2: Using Escaped Newlines
+```yaml
+steps: "1. Navigate to login page\n2. Enter username\n3. Enter password\n4. Click login button"
+expected: "User is logged in\nRedirected to dashboard\nWelcome message displayed"
+```
+
+**Note:** The pipe `|` syntax is easier to read and maintain, especially for long test cases.
+
 ## Best Practices
 
 ### 1. Always Include Required Fields
 ```yaml
 title: "Test case title"
-steps: "Detailed steps"
-expected: "Expected outcome"
+steps: |
+  1. First step
+  2. Second step
+  3. Third step
+expected: |
+  Expected outcome description
 ```
 
 ### 2. Link to Stories
