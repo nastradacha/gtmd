@@ -116,6 +116,18 @@ export default function TestCasesPage() {
     fetchTestCases();
   }, []);
 
+  // Extract numeric ID from story_id (handles "MS-005", "US-005", "5", etc.)
+  const extractStoryNumber = (input: string): string | null => {
+    if (!input) return null;
+    // Match any number in the string (e.g., "MS-005" -> "005" -> "5")
+    const match = input.match(/\d+/);
+    if (match) {
+      // Convert to number and back to string to remove leading zeros
+      return String(parseInt(match[0], 10));
+    }
+    return null;
+  };
+
   // Fetch story preview when story_id changes
   useEffect(() => {
     const storyId = formData.story_id?.trim();
@@ -127,7 +139,15 @@ export default function TestCasesPage() {
     const debounceTimer = setTimeout(async () => {
       setLoadingStory(true);
       try {
-        const res = await fetch(`/api/github/stories?number=${storyId}`);
+        // Extract numeric part (MS-005 -> 5)
+        const numericId = extractStoryNumber(storyId);
+        if (!numericId) {
+          setStoryPreview(null);
+          setLoadingStory(false);
+          return;
+        }
+
+        const res = await fetch(`/api/github/stories?number=${numericId}`);
         if (res.ok) {
           const data = await res.json();
           setStoryPreview(data);
@@ -359,10 +379,16 @@ export default function TestCasesPage() {
     setSuccessMessage(null);
 
     try {
+      // Normalize story_id to just the number (MS-005 -> 5)
+      const normalizedFormData = {
+        ...formData,
+        story_id: formData.story_id ? (extractStoryNumber(formData.story_id) || formData.story_id) : ""
+      };
+
       const res = await fetch("/api/github/testcases/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(normalizedFormData),
       });
 
       if (!res.ok) {
@@ -485,10 +511,13 @@ export default function TestCasesPage() {
                   value={formData.story_id}
                   onChange={(e) => setFormData({ ...formData, story_id: e.target.value })}
                   className="w-full border rounded px-3 py-2"
-                  placeholder="e.g., 123"
+                  placeholder="e.g., 21 or MS-005 or US-005"
                 />
                 {formData.story_id && !storyPreview && !loadingStory && (
                   <p className="text-xs text-gray-500 mt-1">Preview will appear on the right →</p>
+                )}
+                {storyPreview && (
+                  <p className="text-xs text-green-600 mt-1">✓ Story #{storyPreview.number} found</p>
                 )}
               </div>
 
