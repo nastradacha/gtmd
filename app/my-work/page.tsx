@@ -10,6 +10,7 @@ export default function MyWorkPage() {
 
   const [stories, setStories] = useState<GitHubIssue[]>([]);
   const [defects, setDefects] = useState<GitHubIssue[]>([]);
+  const [testCases, setTestCases] = useState<any[]>([]);
 
   const [editId, setEditId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -30,9 +31,10 @@ export default function MyWorkPage() {
         if (!login) throw new Error("No GitHub login found");
 
         // Load assigned items
-        const [storiesRes, defectsRes] = await Promise.all([
+        const [storiesRes, defectsRes, testCasesRes] = await Promise.all([
           fetch(`/api/github/issues?state=open&assignee=${encodeURIComponent(login)}`),
           fetch(`/api/github/issues?state=open&labels=bug&assignee=${encodeURIComponent(login)}`),
+          fetch(`/api/github/testcases`),
         ]);
         if (!storiesRes.ok) throw new Error(await storiesRes.text());
         if (!defectsRes.ok) throw new Error(await defectsRes.text());
@@ -41,6 +43,15 @@ export default function MyWorkPage() {
         // Filter out PRs
         setStories(storiesData.filter((i: any) => !i.pull_request));
         setDefects(defectsData.filter((i: any) => !i.pull_request));
+        
+        // Filter test cases assigned to current user
+        if (testCasesRes.ok) {
+          const allTestCases = await testCasesRes.json();
+          const myTestCases = allTestCases.filter((tc: any) => 
+            tc.assigned_to && tc.assigned_to.toLowerCase() === login.toLowerCase()
+          );
+          setTestCases(myTestCases);
+        }
       } catch (e: any) {
         setError(e.message || "Failed to load 'My Work'");
       } finally {
@@ -60,12 +71,20 @@ export default function MyWorkPage() {
   async function refreshLists() {
     if (!currentUser) return;
     try {
-      const [storiesRes, defectsRes] = await Promise.all([
+      const [storiesRes, defectsRes, testCasesRes] = await Promise.all([
         fetch(`/api/github/issues?state=open&assignee=${encodeURIComponent(currentUser)}`),
         fetch(`/api/github/issues?state=open&labels=bug&assignee=${encodeURIComponent(currentUser)}`),
+        fetch(`/api/github/testcases`),
       ]);
       if (storiesRes.ok) setStories((await storiesRes.json()).filter((i: any) => !i.pull_request));
       if (defectsRes.ok) setDefects((await defectsRes.json()).filter((i: any) => !i.pull_request));
+      if (testCasesRes.ok) {
+        const allTestCases = await testCasesRes.json();
+        const myTestCases = allTestCases.filter((tc: any) => 
+          tc.assigned_to && tc.assigned_to.toLowerCase() === currentUser.toLowerCase()
+        );
+        setTestCases(myTestCases);
+      }
     } catch {}
   }
 
@@ -142,7 +161,7 @@ export default function MyWorkPage() {
         <div className="mb-4 text-sm text-gray-700">{statusMessage}</div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* My Stories */}
         <section className="border rounded-lg p-4">
           <h2 className="font-semibold text-lg mb-3">Stories ({stories.length})</h2>
@@ -240,6 +259,73 @@ export default function MyWorkPage() {
             ))}
 
             {defects.length === 0 && <div className="text-gray-500 text-sm">No defects assigned.</div>}
+          </div>
+        </section>
+
+        {/* My Test Cases */}
+        <section className="border rounded-lg p-4">
+          <h2 className="font-semibold text-lg mb-3">Test Cases ({testCases.length})</h2>
+          <div className="space-y-2">
+            {testCases.map((tc) => {
+              // Extract test case ID from filename
+              const idMatch = tc.name?.match(/^TC-(\d+)/);
+              const testCaseId = idMatch ? `TC-${idMatch[1].padStart(3, '0')}` : 'TC-???';
+              
+              return (
+                <div key={tc.path} className="border rounded p-3 bg-white">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="inline-block px-2 py-0.5 bg-indigo-100 text-indigo-800 text-xs font-semibold rounded">
+                          {testCaseId}
+                        </span>
+                        {tc.pending && (
+                          <span className="inline-block px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded">
+                            Pending PR
+                          </span>
+                        )}
+                      </div>
+                      <div className="font-medium text-sm">{tc.title || tc.name}</div>
+                      <div className="text-xs text-gray-600 mt-1 space-x-2">
+                        {tc.story_id && <span>Story #{tc.story_id}</span>}
+                        {tc.priority && <span>• {tc.priority}</span>}
+                        {tc.suite && <span>• {tc.suite}</span>}
+                      </div>
+                    </div>
+                    <a 
+                      href={tc.url} 
+                      target="_blank" 
+                      rel="noreferrer" 
+                      className="text-blue-600 text-sm hover:underline ml-3"
+                    >
+                      View →
+                    </a>
+                  </div>
+
+                  {/* Quick actions */}
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                    {tc.prUrl && (
+                      <a 
+                        href={tc.prUrl} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="px-2 py-1 border rounded hover:bg-gray-50"
+                      >
+                        View PR
+                      </a>
+                    )}
+                    <a 
+                      href={`/testcases`}
+                      className="px-2 py-1 border rounded hover:bg-gray-50"
+                    >
+                      Execute Test
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
+
+            {testCases.length === 0 && <div className="text-gray-500 text-sm">No test cases assigned.</div>}
           </div>
         </section>
       </div>
