@@ -81,17 +81,25 @@ export async function POST(req: NextRequest) {
     const filename = `TC-${tcId}-${slug}.md`;
     const branchName = `testcase/tc-${tcId}-${slug}`;
 
+    // Helper to format multi-line YAML values
+    const formatYamlMultiline = (value: string) => {
+      if (!value || !value.includes('\n')) {
+        return quote(value);
+      }
+      // Use YAML block scalar (pipe) for multi-line content
+      const lines = value.split('\n').map(line => `  ${line}`).join('\n');
+      return `|\n${lines}`;
+    };
+
     // Create markdown content with audit metadata
     const content = `---
 title: ${quote(title)}
 story_id: ${quote(story_id || "")}
 priority: ${quote(priority || "P2")}
 suite: ${quote(suite || "General")}
-${component ? `component: ${quote(component)}` : ""}
-${preconditions ? `preconditions: ${quote(preconditions)}` : ""}
-${data ? `data: ${quote(data)}` : ""}
-${env ? `env: ${quote(env)}` : ""}
-status: "Draft"
+${component ? `component: ${quote(component)}\n` : ""}${preconditions ? `preconditions: ${formatYamlMultiline(preconditions)}\n` : ""}${data ? `data: ${quote(data)}\n` : ""}steps: ${formatYamlMultiline(steps)}
+expected: ${formatYamlMultiline(expected)}
+${env ? `env: ${quote(env)}\n` : ""}status: "Draft"
 created: ${quote(new Date().toISOString())}
 created_by: ${quote(login)}
 ---
