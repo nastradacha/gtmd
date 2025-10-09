@@ -46,14 +46,40 @@ export async function POST(req: NextRequest) {
     const login = meData.login || "unknown";
     const quote = (v: any) => JSON.stringify(String(v));
 
-    // Generate filename from title
-    const timestamp = Date.now();
+    // Get next test case ID from counter file
+    let nextId = 1;
+    const counterPath = ".gtmd/testcase-counter.txt";
+    
+    try {
+      const counterRes = await fetch(
+        `https://api.github.com/repos/${owner}/${name}/contents/${counterPath}`,
+        {
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`,
+            Accept: "application/vnd.github+json",
+          },
+        }
+      );
+      
+      if (counterRes.ok) {
+        const counterData = await counterRes.json();
+        const counterContent = Buffer.from(counterData.content, "base64").toString("utf-8");
+        nextId = parseInt(counterContent.trim(), 10) + 1;
+      }
+    } catch (err) {
+      // Counter file doesn't exist yet, start at 1
+      console.log("Counter file not found, starting at TC-001");
+    }
+
+    // Generate filename with sequential ID
+    const tcId = String(nextId).padStart(3, "0"); // TC-001, TC-002, etc.
     const slug = title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-    const filename = `TC-${timestamp}-${slug}.md`;
-    const branchName = `testcase/${slug}-${timestamp}`;
+      .replace(/^-+|-+$/g, "")
+      .substring(0, 50); // Limit slug length
+    const filename = `TC-${tcId}-${slug}.md`;
+    const branchName = `testcase/tc-${tcId}-${slug}`;
 
     // Create markdown content with audit metadata
     const content = `---
@@ -164,6 +190,47 @@ ${env ? `- **Environment**: ${env}` : ""}
 
     if (!fileRes.ok) {
       throw new Error(`Failed to create file: ${fileRes.status}`);
+    }
+
+    // Update counter file with new ID
+    try {
+      const counterRes = await fetch(
+        `https://api.github.com/repos/${owner}/${name}/contents/${counterPath}`,
+        {
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`,
+            Accept: "application/vnd.github+json",
+          },
+        }
+      );
+
+      let counterSha: string | undefined;
+      if (counterRes.ok) {
+        const counterData = await counterRes.json();
+        counterSha = counterData.sha;
+      }
+
+      // Update or create counter file
+      await fetch(
+        `https://api.github.com/repos/${owner}/${name}/contents/${counterPath}`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`,
+            Accept: "application/vnd.github+json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            message: `Update test case counter to ${nextId}`,
+            content: Buffer.from(String(nextId)).toString("base64"),
+            branch: branchName,
+            ...(counterSha ? { sha: counterSha } : {}),
+          }),
+        }
+      );
+    } catch (err) {
+      console.error("Failed to update counter:", err);
+      // Don't fail the whole operation if counter update fails
     }
 
     // Create Pull Request

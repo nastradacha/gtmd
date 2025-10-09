@@ -49,8 +49,17 @@ export default function TestCasesPage() {
 
   // Extract test case ID from filename
   const extractTestCaseId = (filename: string): string | null => {
+    // Match both formats: TC-001 (new) and TC-1736936400000 (old timestamp)
     const match = filename.match(/^TC-(\d+)/);
-    return match ? `TC-${match[1]}` : null;
+    if (!match) return null;
+    
+    const idPart = match[1];
+    // If it's a short number (1-4 digits), it's the new format
+    if (idPart.length <= 4) {
+      return `TC-${idPart.padStart(3, '0')}`; // Ensure 3 digits: TC-001
+    }
+    // If it's a long number (timestamp), show abbreviated version
+    return `TC-${idPart.substring(0, 6)}...`; // TC-173693...
   };
 
   // Pretty display name: use frontmatter title if available, else clean filename
