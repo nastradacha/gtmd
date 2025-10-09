@@ -32,6 +32,8 @@ export default function TestCasesPage() {
   const [assignUser, setAssignUser] = useState<string>("");
   const [assignmentMessage, setAssignmentMessage] = useState<string | null>(null);
   const [selectedTestCase, setSelectedTestCase] = useState<TestCase | null>(null);
+  const [storyPreview, setStoryPreview] = useState<any | null>(null);
+  const [loadingStory, setLoadingStory] = useState(false);
 
   const [formData, setFormData] = useState<TestCaseFormData>({
     title: "",
@@ -113,6 +115,34 @@ export default function TestCasesPage() {
   useEffect(() => {
     fetchTestCases();
   }, []);
+
+  // Fetch story preview when story_id changes
+  useEffect(() => {
+    const storyId = formData.story_id?.trim();
+    if (!storyId || !showForm) {
+      setStoryPreview(null);
+      return;
+    }
+
+    const debounceTimer = setTimeout(async () => {
+      setLoadingStory(true);
+      try {
+        const res = await fetch(`/api/github/stories?number=${storyId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setStoryPreview(data);
+        } else {
+          setStoryPreview(null);
+        }
+      } catch (err) {
+        setStoryPreview(null);
+      } finally {
+        setLoadingStory(false);
+      }
+    }, 500); // Debounce 500ms
+
+    return () => clearTimeout(debounceTimer);
+  }, [formData.story_id, showForm]);
 
   // Load latest run status for all files in list
   useEffect(() => {
@@ -403,7 +433,9 @@ export default function TestCasesPage() {
         {showForm && (
           <div className="bg-white border rounded-lg p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">Create New Test Case</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Form - Left 2 columns */}
+              <form onSubmit={handleSubmit} className="space-y-4 lg:col-span-2">
               <div>
                 <label className="block text-sm font-medium mb-1">Title *</label>
                 <input
@@ -455,6 +487,9 @@ export default function TestCasesPage() {
                   className="w-full border rounded px-3 py-2"
                   placeholder="e.g., 123"
                 />
+                {formData.story_id && !storyPreview && !loadingStory && (
+                  <p className="text-xs text-gray-500 mt-1">Preview will appear on the right →</p>
+                )}
               </div>
 
               <div>
@@ -559,6 +594,101 @@ export default function TestCasesPage() {
                 {submitting ? "Creating PR..." : "Create Test Case"}
               </button>
             </form>
+
+              {/* Story Preview - Right column */}
+              <div className="lg:col-span-1">
+                {loadingStory && (
+                  <div className="border rounded-lg p-4 bg-gray-50">
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Loading story...
+                    </div>
+                  </div>
+                )}
+
+                {storyPreview && !loadingStory && (
+                  <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-indigo-50 sticky top-4">
+                    <h3 className="text-sm font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Story #{storyPreview.number}
+                    </h3>
+                    <h4 className="font-bold text-gray-900 mb-3">{storyPreview.title}</h4>
+                    
+                    {storyPreview.labels && storyPreview.labels.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-3">
+                        {storyPreview.labels.map((label: any) => (
+                          <span
+                            key={label.name}
+                            className="text-[10px] px-2 py-0.5 rounded"
+                            style={{
+                              backgroundColor: `#${label.color}`,
+                              color: parseInt(label.color || "000000", 16) > 0xffffff / 2 ? "#000" : "#fff",
+                            }}
+                          >
+                            {label.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {storyPreview.body && (
+                      <div className="text-sm text-gray-700 bg-white rounded p-3 mb-3 max-h-60 overflow-y-auto">
+                        <div className="whitespace-pre-wrap">{storyPreview.body}</div>
+                      </div>
+                    )}
+
+                    {storyPreview.milestone && (
+                      <div className="text-xs text-gray-600 mb-2">
+                        <span className="font-medium">Milestone:</span> {storyPreview.milestone.title}
+                      </div>
+                    )}
+
+                    {storyPreview.assignees && storyPreview.assignees.length > 0 && (
+                      <div className="text-xs text-gray-600 mb-2">
+                        <span className="font-medium">Assigned to:</span> {storyPreview.assignees.map((a: any) => `@${a.login}`).join(", ")}
+                      </div>
+                    )}
+
+                    <a
+                      href={storyPreview.html_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1"
+                    >
+                      View on GitHub
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  </div>
+                )}
+
+                {formData.story_id && !storyPreview && !loadingStory && (
+                  <div className="border rounded-lg p-4 bg-yellow-50 border-yellow-200">
+                    <p className="text-sm text-yellow-800">
+                      <strong>Story not found</strong><br />
+                      No story found with ID #{formData.story_id}. Please check the ID.
+                    </p>
+                  </div>
+                )}
+
+                {!formData.story_id && (
+                  <div className="border rounded-lg p-4 bg-gray-50 text-center">
+                    <svg className="w-12 h-12 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p className="text-sm text-gray-600">
+                      Enter a Story ID to see details
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>
