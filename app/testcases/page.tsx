@@ -139,20 +139,26 @@ export default function TestCasesPage() {
     const debounceTimer = setTimeout(async () => {
       setLoadingStory(true);
       try {
-        // Extract numeric part (MS-005 -> 5)
-        const numericId = extractStoryNumber(storyId);
-        if (!numericId) {
-          setStoryPreview(null);
-          setLoadingStory(false);
-          return;
-        }
-
-        const res = await fetch(`/api/github/stories?number=${numericId}`);
+        // First try the original input (handles MS-005, US-V-005, or numeric IDs)
+        let res = await fetch(`/api/github/stories?number=${encodeURIComponent(storyId)}`);
+        
         if (res.ok) {
           const data = await res.json();
           setStoryPreview(data);
         } else {
-          setStoryPreview(null);
+          // Fallback: try extracting just the number (005 -> 5)
+          const numericId = extractStoryNumber(storyId);
+          if (numericId && numericId !== storyId) {
+            res = await fetch(`/api/github/stories?number=${numericId}`);
+            if (res.ok) {
+              const data = await res.json();
+              setStoryPreview(data);
+            } else {
+              setStoryPreview(null);
+            }
+          } else {
+            setStoryPreview(null);
+          }
         }
       } catch (err) {
         setStoryPreview(null);
@@ -511,13 +517,13 @@ export default function TestCasesPage() {
                   value={formData.story_id}
                   onChange={(e) => setFormData({ ...formData, story_id: e.target.value })}
                   className="w-full border rounded px-3 py-2"
-                  placeholder="e.g., 21 or MS-005 or US-005"
+                  placeholder="e.g., MS-005 or US-V-005 or 21"
                 />
-                {formData.story_id && !storyPreview && !loadingStory && (
-                  <p className="text-xs text-gray-500 mt-1">Preview will appear on the right →</p>
-                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Enter the story prefix (from title) or GitHub issue number
+                </p>
                 {storyPreview && (
-                  <p className="text-xs text-green-600 mt-1">✓ Story #{storyPreview.number} found</p>
+                  <p className="text-xs text-green-600 mt-1 font-medium">✓ Story #{storyPreview.number} found</p>
                 )}
               </div>
 
