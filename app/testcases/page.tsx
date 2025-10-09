@@ -49,6 +49,12 @@ export default function TestCasesPage() {
     folder: "manual/General",
   });
 
+  // Dynamic step fields
+  const [stepsList, setStepsList] = useState<string[]>([""]);  
+  const [expectedList, setExpectedList] = useState<string[]>([""]);  
+  const [preconditionsList, setPreconditionsList] = useState<string[]>([""]);  
+  const [useAdvancedMode, setUseAdvancedMode] = useState(false);
+
   // Extract test case ID from filename
   const extractTestCaseId = (filename: string): string | null => {
     // Match both formats: TC-001 (new) and TC-1736936400000 (old timestamp)
@@ -385,10 +391,36 @@ export default function TestCasesPage() {
     setSuccessMessage(null);
 
     try {
+      // Convert arrays to multi-line format if using step builder
+      let stepsText = formData.steps;
+      let expectedText = formData.expected;
+      let preconditionsText = formData.preconditions;
+
+      if (!useAdvancedMode) {
+        // Filter out empty strings and join with newlines
+        stepsText = stepsList
+          .filter(s => s.trim())
+          .map((s, i) => `${i + 1}. ${s}`)
+          .join('\n');
+        
+        expectedText = expectedList
+          .filter(e => e.trim())
+          .map(e => `- ${e}`)
+          .join('\n');
+        
+        preconditionsText = preconditionsList
+          .filter(p => p.trim())
+          .map(p => `- ${p}`)
+          .join('\n');
+      }
+
       // Normalize story_id to just the number (MS-005 -> 5)
       const normalizedFormData = {
         ...formData,
-        story_id: formData.story_id ? (extractStoryNumber(formData.story_id) || formData.story_id) : ""
+        story_id: formData.story_id ? (extractStoryNumber(formData.story_id) || formData.story_id) : "",
+        steps: stepsText,
+        expected: expectedText,
+        preconditions: preconditionsText,
       };
 
       const res = await fetch("/api/github/testcases/create", {
@@ -426,6 +458,11 @@ export default function TestCasesPage() {
         suite: "General",
         folder: "manual/General",
       });
+      
+      // Reset dynamic lists
+      setStepsList([""]);
+      setExpectedList([""]);
+      setPreconditionsList([""]);
 
       setShowForm(false);
       fetchTestCases();
@@ -528,25 +565,119 @@ export default function TestCasesPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Test Steps *</label>
-                <textarea
-                  required
-                  value={formData.steps}
-                  onChange={(e) => setFormData({ ...formData, steps: e.target.value })}
-                  className="w-full border rounded px-3 py-2 h-32"
-                  placeholder="1. Navigate to login page&#10;2. Enter username&#10;3. Enter password&#10;4. Click login"
-                />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium">Test Steps *</label>
+                  <button
+                    type="button"
+                    onClick={() => setUseAdvancedMode(!useAdvancedMode)}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    {useAdvancedMode ? "Switch to Step Builder" : "Switch to Text Mode"}
+                  </button>
+                </div>
+                
+                {!useAdvancedMode ? (
+                  <div className="space-y-2">
+                    {stepsList.map((step, index) => (
+                      <div key={index} className="flex gap-2">
+                        <span className="text-sm text-gray-500 pt-2 w-8">{index + 1}.</span>
+                        <input
+                          type="text"
+                          value={step}
+                          onChange={(e) => {
+                            const updated = [...stepsList];
+                            updated[index] = e.target.value;
+                            setStepsList(updated);
+                          }}
+                          className="flex-1 border rounded px-3 py-2"
+                          placeholder={`Enter step ${index + 1}`}
+                          required={index === 0}
+                        />
+                        {stepsList.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = stepsList.filter((_, i) => i !== index);
+                              setStepsList(updated.length ? updated : [""]);
+                            }}
+                            className="px-3 py-2 text-red-600 hover:bg-red-50 rounded"
+                            title="Remove step"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setStepsList([...stepsList, ""])}
+                      className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      + Add Step
+                    </button>
+                  </div>
+                ) : (
+                  <textarea
+                    required
+                    value={formData.steps}
+                    onChange={(e) => setFormData({ ...formData, steps: e.target.value })}
+                    className="w-full border rounded px-3 py-2 h-32"
+                    placeholder="1. Navigate to login page&#10;2. Enter username&#10;3. Enter password&#10;4. Click login"
+                  />
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Expected Results *</label>
-                <textarea
-                  required
-                  value={formData.expected}
-                  onChange={(e) => setFormData({ ...formData, expected: e.target.value })}
-                  className="w-full border rounded px-3 py-2 h-24"
-                  placeholder="User should be logged in and redirected to dashboard"
-                />
+                <label className="block text-sm font-medium mb-2">Expected Results *</label>
+                {!useAdvancedMode ? (
+                  <div className="space-y-2">
+                    {expectedList.map((expected, index) => (
+                      <div key={index} className="flex gap-2">
+                        <span className="text-sm text-gray-500 pt-2 w-8">-</span>
+                        <input
+                          type="text"
+                          value={expected}
+                          onChange={(e) => {
+                            const updated = [...expectedList];
+                            updated[index] = e.target.value;
+                            setExpectedList(updated);
+                          }}
+                          className="flex-1 border rounded px-3 py-2"
+                          placeholder={`Expected result ${index + 1}`}
+                          required={index === 0}
+                        />
+                        {expectedList.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = expectedList.filter((_, i) => i !== index);
+                              setExpectedList(updated.length ? updated : [""]);
+                            }}
+                            className="px-3 py-2 text-red-600 hover:bg-red-50 rounded"
+                            title="Remove expected result"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setExpectedList([...expectedList, ""])}
+                      className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      + Add Expected Result
+                    </button>
+                  </div>
+                ) : (
+                  <textarea
+                    required
+                    value={formData.expected}
+                    onChange={(e) => setFormData({ ...formData, expected: e.target.value })}
+                    className="w-full border rounded px-3 py-2 h-24"
+                    placeholder="User should be logged in and redirected to dashboard"
+                  />
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -602,13 +733,54 @@ export default function TestCasesPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Preconditions</label>
-                <textarea
-                  value={formData.preconditions}
-                  onChange={(e) => setFormData({ ...formData, preconditions: e.target.value })}
-                  className="w-full border rounded px-3 py-2 h-20"
-                  placeholder="Setup requirements or prerequisites"
-                />
+                <label className="block text-sm font-medium mb-2">Preconditions</label>
+                {!useAdvancedMode ? (
+                  <div className="space-y-2">
+                    {preconditionsList.map((precondition, index) => (
+                      <div key={index} className="flex gap-2">
+                        <span className="text-sm text-gray-500 pt-2 w-8">-</span>
+                        <input
+                          type="text"
+                          value={precondition}
+                          onChange={(e) => {
+                            const updated = [...preconditionsList];
+                            updated[index] = e.target.value;
+                            setPreconditionsList(updated);
+                          }}
+                          className="flex-1 border rounded px-3 py-2"
+                          placeholder={`Precondition ${index + 1}`}
+                        />
+                        {preconditionsList.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = preconditionsList.filter((_, i) => i !== index);
+                              setPreconditionsList(updated.length ? updated : [""]);
+                            }}
+                            className="px-3 py-2 text-red-600 hover:bg-red-50 rounded"
+                            title="Remove precondition"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setPreconditionsList([...preconditionsList, ""])}
+                      className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      + Add Precondition
+                    </button>
+                  </div>
+                ) : (
+                  <textarea
+                    value={formData.preconditions}
+                    onChange={(e) => setFormData({ ...formData, preconditions: e.target.value })}
+                    className="w-full border rounded px-3 py-2 h-20"
+                    placeholder="Setup requirements or prerequisites"
+                  />
+                )}
               </div>
 
               <div>
