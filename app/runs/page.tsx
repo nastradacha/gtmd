@@ -9,8 +9,12 @@ type SessionTest = {
   suite?: string;
   priority?: string;
   component?: string;
+  steps?: string;
+  expected?: string;
+  preconditions?: string;
   result: "pass" | "fail" | "skip" | null;
   notes: string;
+  expanded?: boolean;
 };
 
 type SessionMetadata = {
@@ -83,8 +87,12 @@ export default function RunsPage() {
       suite: tc.suite,
       priority: tc.priority,
       component: tc.component,
+      steps: tc.steps,
+      expected: tc.expected,
+      preconditions: tc.preconditions,
       result: null,
       notes: "",
+      expanded: false,
     }));
 
     setSessionTests(tests);
@@ -100,6 +108,12 @@ export default function RunsPage() {
   function updateTestNotes(index: number, notes: string) {
     const updated = [...sessionTests];
     updated[index].notes = notes;
+    setSessionTests(updated);
+  }
+
+  function toggleTestExpanded(index: number) {
+    const updated = [...sessionTests];
+    updated[index].expanded = !updated[index].expanded;
     setSessionTests(updated);
   }
 
@@ -438,56 +452,127 @@ export default function RunsPage() {
                 </thead>
                 <tbody>
                   {sessionTests.map((test, index) => (
-                    <tr key={test.path} className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm">{index + 1}</td>
-                      <td className="px-4 py-3 text-sm font-medium">{test.title}</td>
-                      <td className="px-4 py-3 text-sm">{test.suite || "-"}</td>
-                      <td className="px-4 py-3 text-sm">{test.priority || "-"}</td>
-                      <td className="px-4 py-3 text-sm">{test.component || "-"}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => updateTestResult(index, "pass")}
-                            className={`px-3 py-1 rounded text-xs font-medium ${
-                              test.result === "pass"
-                                ? "bg-green-600 text-white"
-                                : "bg-gray-100 text-gray-700 hover:bg-green-100"
-                            }`}
-                          >
-                            Pass
-                          </button>
-                          <button
-                            onClick={() => updateTestResult(index, "fail")}
-                            className={`px-3 py-1 rounded text-xs font-medium ${
-                              test.result === "fail"
-                                ? "bg-red-600 text-white"
-                                : "bg-gray-100 text-gray-700 hover:bg-red-100"
-                            }`}
-                          >
-                            Fail
-                          </button>
-                          <button
-                            onClick={() => updateTestResult(index, "skip")}
-                            className={`px-3 py-1 rounded text-xs font-medium ${
-                              test.result === "skip"
-                                ? "bg-yellow-600 text-white"
-                                : "bg-gray-100 text-gray-700 hover:bg-yellow-100"
-                            }`}
-                          >
-                            Skip
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="text"
-                          value={test.notes}
-                          onChange={(e) => updateTestNotes(index, e.target.value)}
-                          placeholder="Add notes..."
-                          className="w-full border rounded px-2 py-1 text-sm"
-                        />
-                      </td>
-                    </tr>
+                    <>
+                      <tr key={test.path} className="border-b hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm">{index + 1}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => toggleTestExpanded(index)}
+                              className="text-gray-500 hover:text-gray-700 focus:outline-none"
+                              title={test.expanded ? "Collapse" : "Expand to see steps"}
+                            >
+                              <svg
+                                className={`w-4 h-4 transform transition-transform ${
+                                  test.expanded ? "rotate-90" : ""
+                                }`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M9 5l7 7-7 7"
+                                />
+                              </svg>
+                            </button>
+                            <span className="text-sm font-medium">{test.title}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm">{test.suite || "-"}</td>
+                        <td className="px-4 py-3 text-sm">{test.priority || "-"}</td>
+                        <td className="px-4 py-3 text-sm">{test.component || "-"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => updateTestResult(index, "pass")}
+                              className={`px-3 py-1 rounded text-xs font-medium ${
+                                test.result === "pass"
+                                  ? "bg-green-600 text-white"
+                                  : "bg-gray-100 text-gray-700 hover:bg-green-100"
+                              }`}
+                            >
+                              Pass
+                            </button>
+                            <button
+                              onClick={() => updateTestResult(index, "fail")}
+                              className={`px-3 py-1 rounded text-xs font-medium ${
+                                test.result === "fail"
+                                  ? "bg-red-600 text-white"
+                                  : "bg-gray-100 text-gray-700 hover:bg-red-100"
+                              }`}
+                            >
+                              Fail
+                            </button>
+                            <button
+                              onClick={() => updateTestResult(index, "skip")}
+                              className={`px-3 py-1 rounded text-xs font-medium ${
+                                test.result === "skip"
+                                  ? "bg-yellow-600 text-white"
+                                  : "bg-gray-100 text-gray-700 hover:bg-yellow-100"
+                              }`}
+                            >
+                              Skip
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="text"
+                            value={test.notes}
+                            onChange={(e) => updateTestNotes(index, e.target.value)}
+                            placeholder="Add notes..."
+                            className="w-full border rounded px-2 py-1 text-sm"
+                          />
+                        </td>
+                      </tr>
+                      {test.expanded && (
+                        <tr key={`${test.path}-details`} className="bg-blue-50 border-b">
+                          <td></td>
+                          <td colSpan={6} className="px-4 py-4">
+                            <div className="space-y-3">
+                              {test.preconditions && (
+                                <div>
+                                  <h4 className="text-sm font-semibold text-gray-700 mb-1">
+                                    📋 Preconditions:
+                                  </h4>
+                                  <div className="text-sm text-gray-800 whitespace-pre-wrap bg-white p-3 rounded border">
+                                    {test.preconditions}
+                                  </div>
+                                </div>
+                              )}
+                              {test.steps && (
+                                <div>
+                                  <h4 className="text-sm font-semibold text-gray-700 mb-1">
+                                    🔢 Test Steps:
+                                  </h4>
+                                  <div className="text-sm text-gray-800 whitespace-pre-wrap bg-white p-3 rounded border">
+                                    {test.steps}
+                                  </div>
+                                </div>
+                              )}
+                              {test.expected && (
+                                <div>
+                                  <h4 className="text-sm font-semibold text-gray-700 mb-1">
+                                    ✅ Expected Results:
+                                  </h4>
+                                  <div className="text-sm text-gray-800 whitespace-pre-wrap bg-white p-3 rounded border">
+                                    {test.expected}
+                                  </div>
+                                </div>
+                              )}
+                              {!test.steps && !test.expected && (
+                                <div className="text-sm text-gray-500 italic">
+                                  No test steps available for this test case.
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   ))}
                 </tbody>
               </table>
