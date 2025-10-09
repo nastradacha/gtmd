@@ -21,6 +21,35 @@ A lightweight Jira-like dashboard that integrates directly with GitHub for story
 
 ## 🔧 Setup Instructions
 
+### Quick Start Options
+
+#### Option 1: Demo Mode (No Setup Required) 🎓
+
+Perfect for students and first-time users!
+
+1. Visit the application URL
+2. Click **"Try Demo Mode"**
+3. Explore all features with sample data
+
+**Note:** Demo mode is read-only. To create content, use Option 2 or 3.
+
+---
+
+#### Option 2: Use Instructor's OAuth App (Recommended for Students) 👨‍🎓
+
+1. **Get a GitHub account** (free at https://github.com/signup)
+2. **Get repository access** from your instructor
+3. **Sign in** with GitHub on the GTMD app
+4. Done! ✅
+
+See [Student Setup Guide](docs/student-setup-guide.md) for detailed instructions.
+
+---
+
+#### Option 3: Full Setup (Your Own Instance) 🚀
+
+For advanced users running their own instance:
+
 ### 1. Clone the Repository
 
 ```bash

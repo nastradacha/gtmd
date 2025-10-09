@@ -47,6 +47,12 @@ export default function TestCasesPage() {
     folder: "manual/General",
   });
 
+  // Extract test case ID from filename
+  const extractTestCaseId = (filename: string): string | null => {
+    const match = filename.match(/^TC-(\d+)/);
+    return match ? `TC-${match[1]}` : null;
+  };
+
   // Pretty display name: use frontmatter title if available, else clean filename
   const displayName = (file: TestCase) => {
     if (file.title) return file.title;
@@ -580,6 +586,14 @@ export default function TestCasesPage() {
                   }`}
                 >
                   <div className="flex items-center gap-2 flex-wrap">
+                    {(() => {
+                      const tcId = extractTestCaseId(f.name);
+                      return tcId ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-indigo-100 text-indigo-700 border border-indigo-300">
+                          {tcId}
+                        </span>
+                      ) : null;
+                    })()}
                     <div className="font-medium text-sm">{displayName(f)}</div>
                     {f.suite && (
                       <span className="text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-700 border">
@@ -703,8 +717,18 @@ export default function TestCasesPage() {
                         {Object.keys(metadata).length > 0 && (
                           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
                             <div className="grid grid-cols-2 gap-3">
+                              {/* Test Case ID */}
+                              {(() => {
+                                const tcId = extractTestCaseId(selectedFile?.split('/').pop() || '');
+                                return tcId ? (
+                                  <div>
+                                    <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">Test Case ID</div>
+                                    <div className="text-sm font-mono font-bold text-indigo-700 bg-indigo-100 px-2 py-1 rounded inline-block">{tcId}</div>
+                                  </div>
+                                ) : null;
+                              })()}
                               {metadata.title && (
-                                <div className="col-span-2">
+                                <div className={extractTestCaseId(selectedFile?.split('/').pop() || '') ? "" : "col-span-2"}>
                                   <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">Title</div>
                                   <div className="text-lg font-bold text-gray-800">{metadata.title}</div>
                                 </div>
