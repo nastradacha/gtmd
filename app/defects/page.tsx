@@ -23,6 +23,13 @@ export default function DefectsPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [assignedOnly, setAssignedOnly] = useState(false);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
+  
+  // Story search/autocomplete
+  const [storySearch, setStorySearch] = useState("");
+  const [storyResults, setStoryResults] = useState<any[]>([]);
+  const [selectedStory, setSelectedStory] = useState<any | null>(null);
+  const [showStoryDropdown, setShowStoryDropdown] = useState(false);
+  const [loadingStories, setLoadingStories] = useState(false);
 
   // Filters
   const [severityFilter, setSeverityFilter] = useState("");
@@ -53,6 +60,53 @@ export default function DefectsPage() {
       .then((u) => setCurrentUser(u?.login || null))
       .catch(() => {});
   }, []);
+
+  // Search stories when storySearch changes
+  useEffect(() => {
+    const search = storySearch.trim();
+    if (!search || !showForm) {
+      setStoryResults([]);
+      return;
+    }
+
+    const debounceTimer = setTimeout(async () => {
+      setLoadingStories(true);
+      try {
+        // Try search by number/prefix first
+        const res = await fetch(`/api/github/stories?number=${encodeURIComponent(search)}`);
+        if (res.ok) {
+          const data = await res.json();
+          // If single result, show it
+          if (data.number) {
+            setStoryResults([data]);
+          } else if (Array.isArray(data)) {
+            setStoryResults(data.slice(0, 10));
+          }
+        } else {
+          // Fallback: search all stories
+          const allRes = await fetch(`/api/github/issues?state=all`);
+          if (allRes.ok) {
+            const allStories = await allRes.json();
+            // Filter by title or number
+            const filtered = allStories
+              .filter((s: any) => 
+                !s.labels.some((l: any) => l.name === 'bug') && // Exclude bugs
+                (s.number.toString().includes(search) || 
+                 s.title.toLowerCase().includes(search.toLowerCase()))
+              )
+              .slice(0, 10);
+            setStoryResults(filtered);
+          }
+        }
+      } catch (err) {
+        setStoryResults([]);
+      } finally {
+        setLoadingStories(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(debounceTimer);
+  }, [storySearch, showForm]);
 
   useEffect(() => {
     if (selectedDefect) {
@@ -165,11 +219,13 @@ export default function DefectsPage() {
     setError(null);
 
     try {
+      // Use selected story number if available, otherwise use what was entered
+      const storyIdToUse = selectedStory ? selectedStory.number.toString() : (formData.storyId || "").trim();
+      
       const yamlLines: string[] = ["---"]; 
-      const storyIdTrim = (formData.storyId || "").trim();
       const testCaseTrim = (formData.testCaseId || "").trim();
-      if (storyIdTrim) {
-        yamlLines.push(`story_id: "${storyIdTrim}"`);
+      if (storyIdToUse) {
+        yamlLines.push(`story_id: "${storyIdToUse}"`);
       }
       if (testCaseTrim) {
         yamlLines.push(`test_case: "${testCaseTrim}"`);
@@ -182,7 +238,7 @@ export default function DefectsPage() {
 
 **Severity**: ${formData.severity}
 **Priority**: ${formData.priority}
-${formData.storyId ? `**Story ID**: #${formData.storyId}` : ""}
+${storyIdToUse ? `**Story ID**: #${storyIdToUse}${selectedStory ? ` (${selectedStory.title})` : ''}` : ""}
 ${formData.testCaseId ? `**Test Case**: ${formData.testCaseId}` : ""}
 
 ## Description
@@ -214,6 +270,9 @@ ${formData.description}
         storyId: "",
         testCaseId: "",
       });
+      setStorySearch("");
+      setSelectedStory(null);
+      setStoryResults([]);
       setShowForm(false);
       fetchDefects();
     } catch (err: any) {
@@ -312,15 +371,93 @@ ${formData.description}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="relative">
                   <label className="block text-sm font-medium mb-1">Story ID</label>
                   <input
                     type="text"
-                    value={formData.storyId}
-                    onChange={(e) => setFormData({ ...formData, storyId: e.target.value })}
+                    value={selectedStory ? `#${selectedStory.number} - ${selectedStory.title}` : storySearch}
+                    onChange={(e) => {
+                      if (selectedStory) {
+                        // Clear selection when editing
+                        setSelectedStory(null);
+                        setFormData({ ...formData, storyId: "" });
+                      }
+                      setStorySearch(e.target.value);
+                      setShowStoryDropdown(true);
+                    }}
+                    onFocus={() => setShowStoryDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowStoryDropdown(false), 200)}
                     className="w-full border rounded px-3 py-2"
-                    placeholder="e.g., 123"
+                    placeholder="Search by MS-005, US-V-005, or #21"
                   />
+                  {selectedStory && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedStory(null);
+                        setStorySearch("");
+                        setFormData({ ...formData, storyId: "" });
+                      }}
+                      className="absolute right-2 top-8 text-gray-400 hover:text-gray-600"
+                    >
+                      ✕
+                    </button>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    {selectedStory ? (
+                      <span className="text-green-600 font-medium">✓ Story selected</span>
+                    ) : (
+                      "Enter story prefix or number to search"
+                    )}
+                  </p>
+                  
+                  {/* Dropdown */}
+                  {showStoryDropdown && storyResults.length > 0 && !selectedStory && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {loadingStories && (
+                        <div className="p-3 text-sm text-gray-500">Searching...</div>
+                      )}
+                      {storyResults.map((story) => (
+                        <button
+                          key={story.number}
+                          type="button"
+                          onClick={() => {
+                            setSelectedStory(story);
+                            setFormData({ ...formData, storyId: story.number.toString() });
+                            setShowStoryDropdown(false);
+                            setStorySearch("");
+                          }}
+                          className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b last:border-b-0"
+                        >
+                          <div className="font-medium text-sm text-gray-900">
+                            #{story.number} - {story.title}
+                          </div>
+                          {story.labels && story.labels.length > 0 && (
+                            <div className="flex gap-1 mt-1">
+                              {story.labels.slice(0, 3).map((label: any) => (
+                                <span
+                                  key={label.name}
+                                  className="text-[9px] px-1.5 py-0.5 rounded"
+                                  style={{
+                                    backgroundColor: `#${label.color}`,
+                                    color: parseInt(label.color || "000000", 16) > 0xffffff / 2 ? "#000" : "#fff",
+                                  }}
+                                >
+                                  {label.name}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {showStoryDropdown && !loadingStories && storyResults.length === 0 && storySearch && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg p-3">
+                      <p className="text-sm text-gray-500">No stories found for "{storySearch}"</p>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -332,6 +469,9 @@ ${formData.description}
                     className="w-full border rounded px-3 py-2"
                     placeholder="e.g., TC-001"
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Optional: Link to test case that found this bug
+                  </p>
                 </div>
               </div>
 
