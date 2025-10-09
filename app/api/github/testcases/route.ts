@@ -1,16 +1,18 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import yaml from "js-yaml";
 
-function parseFrontmatter(content: string): Record<string, string> {
+function parseFrontmatter(content: string): Record<string, any> {
   const fmMatch = content.match(/^---\s*\r?\n([\s\S]+?)\r?\n---/);
   if (!fmMatch) return {};
-  const block = fmMatch[1];
-  const meta: Record<string, string> = {};
-  block.split(/\r?\n/).forEach((line) => {
-    const m = line.match(/^(\w[\w_-]*):\s*(?:["'](.+?)["']|(.+?))\s*$/);
-    if (m) meta[m[1]] = (m[2] || m[3] || "").trim();
-  });
-  return meta;
+  
+  try {
+    const parsed = yaml.load(fmMatch[1]) as Record<string, any>;
+    return parsed || {};
+  } catch (e) {
+    console.error("Failed to parse frontmatter:", e);
+    return {};
+  }
 }
 
 export async function GET(req: Request) {
