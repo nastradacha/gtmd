@@ -540,7 +540,7 @@
 
  **Priority:** P1  
  **Story Points:** 5  
- **Status:** Planned
+ **Status:** ✅ Completed
 
  ---
 
@@ -607,7 +607,7 @@
 
  **Priority:** P2  
  **Story Points:** 2  
- **Status:** Planned
+ **Status:** ✅ Completed
 
  ----
 

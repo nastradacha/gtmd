@@ -220,6 +220,58 @@ gtmd/
 - Link defects to stories and test cases
 - Filter by severity and status
 - View defect details on GitHub
+- **Use GitHub Issue Template**: When creating defects directly in GitHub, use the "🐛 Bug/Defect Report" template to ensure proper linkage fields
+
+## 📦 Test Run Index System
+
+GTMD uses a **latest.json index** for fast test run lookups without scanning all run files.
+
+### Index Contract
+
+Each test case's run directory maintains a `latest.json` file:
+
+```
+qa-runs/
+└── qa-testcases__manual__TC-001-example.md/
+    ├── run-1234567890.json     # Individual run records
+    ├── run-1234567891.json
+    └── latest.json              # Index pointing to latest run
+```
+
+**latest.json structure:**
+```json
+{
+  "result": "pass",
+  "executed_at": "2025-01-15T10:30:00.000Z",
+  "executed_by": "username",
+  "run_file": "run-1234567891.json",
+  "updated_at": "2025-01-15T10:30:00.000Z"
+}
+```
+
+### Benefits
+- **Fast matrix loading**: No need to scan/list all run files
+- **Automatic updates**: Index is updated on every test execution
+- **Fallback scanning**: If index is missing, system falls back to directory scan
+- **Backfill support**: Admin route to generate indices for existing runs
+
+### Backfill Existing Runs
+
+To create indices for runs recorded before this feature:
+
+```bash
+# Dry run (preview only)
+curl http://localhost:3000/api/admin/backfill-run-indices?dryRun=true
+
+# Actual backfill
+curl http://localhost:3000/api/admin/backfill-run-indices
+```
+
+The backfill:
+- Scans all `qa-runs/*` directories
+- Finds the latest run file in each
+- Creates/updates `latest.json` with metadata
+- Reports created/updated/skipped counts
 
 ## 🚢 Deployment
 

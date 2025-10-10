@@ -32,27 +32,47 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const path = searchParams.get("path");
     const limit = Math.max(1, Math.min(50, Number(searchParams.get("limit") || 20)));
+    const skipIndex = searchParams.get("skipIndex") === "true";
+    
     if (!path) {
       return new Response(JSON.stringify({ error: "path is required" }), { status: 400 });
     }
 
     // Encode path: replace / with __ (dots are allowed in filenames)
     const runDir = `qa-runs/${path.replace(/\//g, "__")}`;
+    const latestIndexPath = `${runDir}/latest.json`;
+
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      Accept: "application/vnd.github+json",
+    };
+
+    // Try to fetch latest.json index first (fast path)
+    let latestFromIndex = null;
+    if (!skipIndex) {
+      try {
+        const indexRes = await fetch(
+          `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(latestIndexPath)}`,
+          { headers, cache: "no-store" }
+        );
+        if (indexRes.ok) {
+          const indexData = await indexRes.json();
+          const indexContent = Buffer.from(indexData.content || "", "base64").toString("utf-8");
+          latestFromIndex = JSON.parse(indexContent);
+        }
+      } catch (e) {
+        // Index not found or invalid, fall back to scanning
+      }
+    }
 
     const listRes = await fetch(
       `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(runDir)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          Accept: "application/vnd.github+json",
-        },
-        cache: "no-store",
-      }
+      { headers, cache: "no-store" }
     );
 
     if (listRes.status === 404) {
       return new Response(
-        JSON.stringify({ latest: null, runs: [] }),
+        JSON.stringify({ latest: null, runs: [], indexUsed: false }),
         { status: 200 }
       );
     }
@@ -81,9 +101,16 @@ export async function GET(req: Request) {
       }
     }
 
-    const latest = runs[0] || null;
+    // Use index if available and valid, otherwise use scanned latest
+    const latest = latestFromIndex || runs[0] || null;
+    
     return new Response(
-      JSON.stringify({ latest, runs }),
+      JSON.stringify({ 
+        latest, 
+        runs,
+        indexUsed: !!latestFromIndex,
+        indexAvailable: !!latestFromIndex 
+      }),
       { status: 200 }
     );
   } catch (error: any) {

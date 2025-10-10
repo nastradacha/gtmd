@@ -1,0 +1,157 @@
+name: 🐛 Bug/Defect Report
+description: Report a bug or defect found during testing
+title: "[BUG]: "
+labels: ["bug", "defect"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🐛 Bug/Defect Report
+        
+        Thank you for reporting a bug! Please provide as much detail as possible to help us fix it quickly.
+        
+        **IMPORTANT**: Fill in the linkage fields below to ensure traceability.
+
+  - type: input
+    id: story_id
+    attributes:
+      label: Related Story ID
+      description: "GitHub Issue number of the related user story (without #)"
+      placeholder: "e.g., 42"
+    validations:
+      required: false
+
+  - type: input
+    id: test_case
+    attributes:
+      label: Related Test Case
+      description: "Path to the test case that found this bug"
+      placeholder: "e.g., qa-testcases/manual/TC-001-login.md"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: "How severe is this bug?"
+      options:
+        - Critical (System crash, data loss)
+        - High (Major feature broken)
+        - Medium (Feature partially broken)
+        - Low (Minor issue, cosmetic)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: "How urgent is the fix?"
+      options:
+        - P1 (Urgent - fix immediately)
+        - P2 (High - fix soon)
+        - P3 (Medium - fix when possible)
+        - P4 (Low - nice to have)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      description: "Where was this bug found?"
+      options:
+        - Production
+        - Staging
+        - Development
+        - QA
+        - Local
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: "Clear description of what went wrong"
+      placeholder: "Describe the bug..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: "Detailed steps to reproduce the bug"
+      placeholder: |
+        1. Go to...
+        2. Click on...
+        3. Scroll down to...
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: "What should have happened?"
+      placeholder: "Describe the expected behavior..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: "What actually happened?"
+      placeholder: "Describe what actually happened..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots/Logs
+      description: "Add screenshots, error logs, or console output (if applicable)"
+      placeholder: "Paste images or logs here..."
+    validations:
+      required: false
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser/Device
+      description: "Browser and version, or device information"
+      placeholder: "e.g., Chrome 120, Safari on iOS 17, etc."
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: "Any other information that might help"
+      placeholder: "Add any additional context..."
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        
+        ### 📝 For GTMD Traceability
+        
+        This template automatically includes linking fields for:
+        - **story_id**: Links the defect to a user story
+        - **test_case**: Links the defect to a specific test case
+        - **severity** and **priority**: Help prioritize fixes
+        
+        These fields enable the Traceability Matrix to show:
+        - Which stories have defects
+        - Which test cases found defects
+        - Defect health metrics
+        
+        **After creating this issue**, the GTMD dashboard will automatically detect and display it!
