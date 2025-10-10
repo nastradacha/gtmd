@@ -200,7 +200,7 @@ ${env ? `- **Environment**: ${env}` : ""}
       throw new Error(`Failed to create file: ${fileRes.status}`);
     }
 
-    // Update counter file with new ID
+    // Update counter file with new ID in main branch (not feature branch!)
     try {
       const counterRes = await fetch(
         `https://api.github.com/repos/${owner}/${name}/contents/${counterPath}`,
@@ -218,8 +218,8 @@ ${env ? `- **Environment**: ${env}` : ""}
         counterSha = counterData.sha;
       }
 
-      // Update or create counter file
-      await fetch(
+      // Update or create counter file in MAIN branch
+      const updateRes = await fetch(
         `https://api.github.com/repos/${owner}/${name}/contents/${counterPath}`,
         {
           method: "PUT",
@@ -231,11 +231,15 @@ ${env ? `- **Environment**: ${env}` : ""}
           body: JSON.stringify({
             message: `Update test case counter to ${nextId}`,
             content: Buffer.from(String(nextId)).toString("base64"),
-            branch: branchName,
+            branch: "main", // Update in main, not feature branch!
             ...(counterSha ? { sha: counterSha } : {}),
           }),
         }
       );
+      
+      if (!updateRes.ok) {
+        console.error("Failed to update counter in main:", await updateRes.text());
+      }
     } catch (err) {
       console.error("Failed to update counter:", err);
       // Don't fail the whole operation if counter update fails
