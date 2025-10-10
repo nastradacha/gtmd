@@ -489,7 +489,7 @@
 
  **Priority:** P1  
  **Story Points:** 8  
- **Status:** Planned
+ **Status:** ✅ Completed
 
  ----
 
@@ -506,7 +506,7 @@
 
  **Priority:** P1  
  **Story Points:** 3  
- **Status:** Planned
+ **Status:** ✅ Completed
 
  ----
 
