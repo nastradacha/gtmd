@@ -333,7 +333,7 @@
  
  **Priority:** P1  
  **Story Points:** 3  
- **Status:** Planned
+ **Status:** ✅ Completed
  
  ---
  
@@ -350,7 +350,7 @@
  
  **Priority:** P1  
  **Story Points:** 5  
- **Status:** Planned
+ **Status:** ✅ Completed
  
  ---
  
@@ -369,7 +369,7 @@
  
  **Priority:** P1  
  **Story Points:** 8  
- **Status:** Planned
+ **Status:** ✅ Completed
  
  ---
  
@@ -385,7 +385,7 @@
  
  **Priority:** P1  
  **Story Points:** 3  
- **Status:** Planned
+ **Status:** ✅ Completed
  
  ---
  
@@ -393,15 +393,15 @@
  - **As a** QA manager  
  - **I want** to export the matrix to CSV  
  - **So that** I can share with stakeholders.
- 
+
  **Acceptance Criteria**
  - Export button on Traceability page.  
  - CSV includes story, tests, latest result, defect counts, assignees.  
  - Reuses report-friendly headers.
- 
+
  **Priority:** P2  
  **Story Points:** 2  
- **Status:** Planned
+ **Status:** ✅ Completed
  
  ---
  
@@ -523,7 +523,7 @@
 
  **Priority:** P1  
  **Story Points:** 3  
- **Status:** Planned
+ **Status:** ✅ Completed
 
  ----
 
@@ -575,7 +575,7 @@
 
  **Priority:** P2  
  **Story Points:** 2  
- **Status:** Planned
+ **Status:** ✅ Completed
 
  ----
 
