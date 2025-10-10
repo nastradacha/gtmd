@@ -235,7 +235,8 @@
 - Missing or invalid config shows descriptive error in UI.  
 
 **Priority:** P1  
-**Story Points:** 3
+**Story Points:** 3  
+**Status:** ✅ Completed
 
 ---
 
@@ -249,7 +250,8 @@
 - Different UI permissions based on role.  
 
 **Priority:** P3  
-**Story Points:** 8
+**Story Points:** 8  
+**Status:** Planned
 
 ---
 
