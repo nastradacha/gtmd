@@ -106,13 +106,28 @@ export async function GET(req: Request) {
     const defects = issuesOnly.filter((it: any) => it.labels?.some((l: any) => (l.name || "").toLowerCase() === "bug"));
     const stories = issuesOnly.filter((it: any) => !it.labels?.some((l: any) => (l.name || "").toLowerCase() === "bug"));
 
-    // Build story index by numeric and with US- prefix for matching
+    // Helper to extract numeric ID from various formats (MS-001 -> 1, US-V-002 -> 2, etc.)
+    function extractNumericId(storyId: string | number): string | null {
+      if (!storyId) return null;
+      const str = String(storyId);
+      // Match any number in the string
+      const match = str.match(/\d+/);
+      if (match) {
+        // Convert to number and back to remove leading zeros
+        return String(parseInt(match[0], 10));
+      }
+      return null;
+    }
+
+    // Build story index by numeric ID for flexible matching
     const storyIndex = new Map<string, any>();
     for (const s of stories) {
       const numStr = String(s.number);
       storyIndex.set(numStr, s);
       storyIndex.set(`US-${numStr}`, s);
       storyIndex.set(`#${numStr}`, s);
+      storyIndex.set(`MS-${numStr}`, s); // Support MS prefix
+      storyIndex.set(`US-V-${numStr}`, s); // Support US-V prefix
     }
 
     // 2) Fetch test cases from TESTCASES_REPO main
@@ -277,6 +292,14 @@ export async function GET(req: Request) {
         const arr = defectsByStory.get(key) || [];
         arr.push(d);
         defectsByStory.set(key, arr);
+        
+        // Also index by extracted numeric ID for flexible matching
+        const numericId = extractNumericId(key);
+        if (numericId) {
+          const arr2 = defectsByStory.get(numericId) || [];
+          arr2.push(d);
+          defectsByStory.set(numericId, arr2);
+        }
       }
       if (d._links?.test_case) {
         const key2 = (d._links.test_case + "").trim();
@@ -305,8 +328,16 @@ export async function GET(req: Request) {
 
     for (const s of stories) {
       const numStr = String(s.number);
-      const keys = new Set([numStr, `US-${numStr}`, `#${numStr}`]);
-      const testsForStory = testCases.filter((tc) => tc.story_id && keys.has(String(tc.story_id)));
+      const keys = new Set([numStr, `US-${numStr}`, `#${numStr}`, `MS-${numStr}`, `US-V-${numStr}`]);
+      const testsForStory = testCases.filter((tc) => {
+        if (!tc.story_id) return false;
+        const storyIdStr = String(tc.story_id);
+        // Direct match
+        if (keys.has(storyIdStr)) return true;
+        // Extract numeric part and match (e.g., MS-001 -> 1 matches story #1)
+        const extractedNum = extractNumericId(storyIdStr);
+        return extractedNum === numStr;
+      });
 
       if (testsForStory.length === 0) {
         gaps.storiesWithoutTests.push(s.number);
