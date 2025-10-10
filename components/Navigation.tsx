@@ -23,6 +23,7 @@ export default function Navigation() {
     { href: "/runs", label: "Runs" },
     { href: "/defects", label: "Defects" },
     { href: "/traceability", label: "Traceability" },
+    { href: "/activity", label: "Activity" },
     { href: "/my-work", label: "My Work" },
     { href: "/reports", label: "Reports" },
     { href: "/ceremonies", label: "Ceremonies" },

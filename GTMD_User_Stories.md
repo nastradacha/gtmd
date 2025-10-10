@@ -409,15 +409,15 @@
  - **As a** QA lead  
  - **I want** a consistent convention for linking defects to stories/test cases  
  - **So that** associations are reliable in the matrix.
- 
+
  **Acceptance Criteria**
  - Defect creation flow adds a YAML block with `story_id` and optional `test_case`.  
  - Existing defects can be edited to include this block.  
  - Parser added in the matrix API.
- 
+
  **Priority:** P2  
  **Story Points:** 3  
- **Status:** Planned
+ **Status:** ✅ Completed
  
  ---
  
@@ -433,7 +433,7 @@
  
  **Priority:** P2  
  **Story Points:** 2  
- **Status:** Planned
+ **Status:** ✅ Completed
  
  ---
  
@@ -449,7 +449,7 @@
  
  **Priority:** P3  
  **Story Points:** 3  
- **Status:** Planned
+ **Status:** ✅ Completed
  
  ---
  
@@ -623,13 +623,13 @@
 
  **Priority:** P2  
  **Story Points:** 3  
- **Status:** Planned
+ **Status:** ✅ Completed
 
  ----
 
  #### 9.11 Instructor Dashboard (MVP)
  - **As an** instructor  
- - **I want** to see each student’s testing activity  
+ - **I want** to see each student's testing activity  
  - **So that** I can coach and grade effectively.
 
  **Acceptance Criteria**
@@ -639,7 +639,7 @@
 
  **Priority:** P2  
  **Story Points:** 8  
- **Status:** Planned
+ **Status:** ✅ Completed
 
  ----
 

@@ -1223,6 +1223,62 @@ export default function TestCasesPage() {
                     </div>
                   </div>
 
+                  {/* Create Defect from Failure */}
+                  {latestRun && String(latestRun.result).toLowerCase() === "fail" && (
+                    <div className="mt-3">
+                      <button
+                        onClick={() => {
+                          const storyId = selectedTestCase?.story_id || "";
+                          const testPath = selectedFile || "";
+                          const failNotes = latestRun.notes || notes || "";
+                          const title = `[BUG] ${selectedTestCase?.title || selectedTestCase?.name || "Test failure"}`;
+                          const body = `---
+story_id: "${storyId}"
+test_case: "${testPath}"
+---
+
+## Bug Description
+Test case failed during execution.
+
+## Test Case
+${testPath}
+
+## Steps to Reproduce
+See test case: ${testPath}
+
+## Expected Behavior
+Test should pass.
+
+## Actual Behavior
+Test failed with notes: ${failNotes}
+
+## Additional Context
+- Executed by: @${latestRun.executed_by}
+- Executed at: ${new Date(latestRun.executed_at).toLocaleString()}
+- Latest run notes: ${failNotes}
+`;
+                          const params = new URLSearchParams({
+                            title,
+                            body,
+                            labels: "bug,defect,test-failure",
+                          });
+                          const repoEnv = process.env.NEXT_PUBLIC_STORIES_REPO || "";
+                          const repoUrl = repoEnv.includes("github.com") 
+                            ? repoEnv.replace(/\.git$/, "")
+                            : `https://github.com/${repoEnv}`;
+                          window.open(`${repoUrl}/issues/new?${params.toString()}`, "_blank");
+                        }}
+                        className="w-full px-3 py-2 rounded bg-orange-600 text-white text-sm hover:bg-orange-700 flex items-center justify-center gap-2"
+                        title="Create a defect issue from this failure"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        Create Defect from Failure
+                      </button>
+                    </div>
+                  )}
+
                   {/* Latest run status */}
                   <div className="mt-3 text-xs text-gray-600">
                     {latestRun ? (
