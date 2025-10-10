@@ -3,12 +3,12 @@ import { authOptions } from "@/lib/auth";
 import { NextRequest } from "next/server";
 
 /**
- * POST /api/admin/fix-duplicate-ids
+ * GET/POST /api/admin/fix-duplicate-ids
  * Scans all test cases, finds duplicates, and renames them to unique sequential IDs
  * Query params:
  *  - dryRun=true : preview changes without applying them
  */
-export async function POST(req: NextRequest) {
+async function fixDuplicates(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
@@ -285,4 +285,13 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// Export both GET and POST handlers
+export async function GET(req: NextRequest) {
+  return fixDuplicates(req);
+}
+
+export async function POST(req: NextRequest) {
+  return fixDuplicates(req);
 }
