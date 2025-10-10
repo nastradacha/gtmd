@@ -34,6 +34,7 @@ export default function TestCasesPage() {
   const [selectedTestCase, setSelectedTestCase] = useState<TestCase | null>(null);
   const [storyPreview, setStoryPreview] = useState<any | null>(null);
   const [loadingStory, setLoadingStory] = useState(false);
+  const [storiesRepo, setStoriesRepo] = useState("");
 
   const [formData, setFormData] = useState<TestCaseFormData>({
     title: "",
@@ -117,10 +118,23 @@ export default function TestCasesPage() {
     }
   }
 
-  // Fetch test cases on mount
+  // Fetch test cases and config on mount
   useEffect(() => {
     fetchTestCases();
+    fetchConfig();
   }, []);
+
+  async function fetchConfig() {
+    try {
+      const res = await fetch("/api/admin/config");
+      if (res.ok) {
+        const data = await res.json();
+        setStoriesRepo(data.storiesRepo || "");
+      }
+    } catch (e) {
+      // Silently fail, will use empty repo
+    }
+  }
 
   // Extract numeric ID from story_id (handles "MS-005", "US-005", "5", etc.)
   const extractStoryNumber = (input: string): string | null => {
@@ -1262,10 +1276,9 @@ Test failed with notes: ${failNotes}
                             body,
                             labels: "bug,defect,test-failure",
                           });
-                          const repoEnv = process.env.NEXT_PUBLIC_STORIES_REPO || "";
-                          const repoUrl = repoEnv.includes("github.com") 
-                            ? repoEnv.replace(/\.git$/, "")
-                            : `https://github.com/${repoEnv}`;
+                          const repoUrl = storiesRepo.includes("github.com") 
+                            ? storiesRepo.replace(/\.git$/, "")
+                            : `https://github.com/${storiesRepo}`;
                           window.open(`${repoUrl}/issues/new?${params.toString()}`, "_blank");
                         }}
                         className="w-full px-3 py-2 rounded bg-orange-600 text-white text-sm hover:bg-orange-700 flex items-center justify-center gap-2"

@@ -39,6 +39,7 @@ export default function RunsPage() {
     build: "",
     tester: "",
   });
+  const [storiesRepo, setStoriesRepo] = useState("");
 
   // Filters for test selection
   const [filterSuite, setFilterSuite] = useState("");
@@ -51,7 +52,20 @@ export default function RunsPage() {
 
   useEffect(() => {
     fetchTestCases();
+    fetchConfig();
   }, []);
+
+  async function fetchConfig() {
+    try {
+      const res = await fetch("/api/admin/config");
+      if (res.ok) {
+        const data = await res.json();
+        setStoriesRepo(data.storiesRepo || "");
+      }
+    } catch (e) {
+      // Silently fail, will use empty repo
+    }
+  }
 
   async function fetchTestCases() {
     try {
@@ -628,10 +642,9 @@ Test failed with notes: ${failNotes}
                                         body,
                                         labels: "bug,defect,test-failure",
                                       });
-                                      const repoEnv = process.env.NEXT_PUBLIC_STORIES_REPO || "";
-                                      const repoUrl = repoEnv.includes("github.com") 
-                                        ? repoEnv.replace(/\.git$/, "")
-                                        : `https://github.com/${repoEnv}`;
+                                      const repoUrl = storiesRepo.includes("github.com") 
+                                        ? storiesRepo.replace(/\.git$/, "")
+                                        : `https://github.com/${storiesRepo}`;
                                       window.open(`${repoUrl}/issues/new?${params.toString()}`, "_blank");
                                     }}
                                     className="w-full px-4 py-2 rounded bg-orange-600 text-white text-sm hover:bg-orange-700 flex items-center justify-center gap-2"
