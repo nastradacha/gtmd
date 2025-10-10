@@ -267,23 +267,19 @@
 
 **Priority:** P1  
 **Story Points:** 5  
-**Status:** In Progress
+**Status:** Completed
 
 ---
 
 ### 7.2 Execute Test Case (Pass/Fail)
 - **As a** tester  
-- **I want** to record execution results (pass/fail)  
-- **So that** I can track run outcomes against stories.  
-
-**Acceptance Criteria**
-- Button to mark Pass or Fail with optional notes.  
+{{ ... }}
 - Result saved to repo under `qa-runs/` with user and timestamp.  
 - Optional PR created to capture audit trail.  
 
 **Priority:** P1  
 **Story Points:** 5  
-**Status:** In Progress
+**Status:** Completed
 
 ---
 
@@ -293,13 +289,13 @@
 - **So that** ownership is clear during triage and execution.  
 
 **Acceptance Criteria**
-- Buttons: “Assign to me”, “Assign to…”, “Unassign”.  
+- Buttons: "Assign to me", "Assign to…", "Unassign".  
 - Uses GitHub Issues assignees API.  
 - Visible on Stories and Defects pages.  
 
 **Priority:** P1  
 **Story Points:** 3  
-**Status:** Planned
+**Status:** Completed
 
 ---
 
@@ -314,12 +310,14 @@
 - Preserve full edit history in GitHub.  
 
 **Priority:** P2  
-**Story Points:** 3  **Status:** Planned
+**Story Points:** 3  
+**Status:** Completed
 
  ---
  
- ## 🔗 8. Traceability & Matrix
+ ## 8. Traceability & Matrix
  
+{{ ... }}
  ### 8.1 Parse story_id from Test Cases
  - **As a** QA lead  
  - **I want** to extract `story_id` from test case frontmatter  
