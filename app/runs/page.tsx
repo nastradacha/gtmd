@@ -390,6 +390,18 @@ export default function RunsPage() {
         </div>
       ) : (
         <div className="space-y-6">
+          {/* Instructions Banner */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-blue-900 mb-2">📋 How to Execute Tests:</h3>
+            <ol className="text-sm text-blue-800 space-y-1 ml-4 list-decimal">
+              <li>Click the <strong>arrow (▶)</strong> next to a test to see its steps and expected results</li>
+              <li>Follow the test steps and perform the actions</li>
+              <li>In the <strong>"Execution Notes"</strong> field, describe what actually happened (e.g., "Login successful - dashboard loaded")</li>
+              <li>Click <strong>Pass</strong>, <strong>Fail</strong>, or <strong>Skip</strong> based on whether the actual results match the expected results</li>
+              <li>Repeat for all tests, then click <strong>"Submit Session"</strong> at the bottom</li>
+            </ol>
+          </div>
+
           {/* Session Header */}
           <div className="border rounded-lg p-4 bg-white">
             <div className="flex items-center justify-between mb-4">
@@ -446,8 +458,8 @@ export default function RunsPage() {
                     <th className="px-4 py-3 text-left text-sm font-medium">Suite</th>
                     <th className="px-4 py-3 text-left text-sm font-medium">Priority</th>
                     <th className="px-4 py-3 text-left text-sm font-medium">Component</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium">Result</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium">Notes</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium w-32">✓ Mark Result</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium">📝 Execution Notes / Actual Results</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -519,13 +531,16 @@ export default function RunsPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <input
-                            type="text"
+                          <textarea
                             value={test.notes}
                             onChange={(e) => updateTestNotes(index, e.target.value)}
-                            placeholder="Add notes..."
-                            className="w-full border rounded px-2 py-1 text-sm"
+                            placeholder="Enter what happened during execution...&#10;e.g., 'Login successful - redirected to dashboard'&#10;or 'Login failed - error message displayed'"
+                            className="w-full border rounded px-2 py-1 text-sm min-h-[60px] resize-y"
+                            rows={2}
                           />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Describe the actual result you observed
+                          </p>
                         </td>
                       </tr>
                       {test.expanded && (
