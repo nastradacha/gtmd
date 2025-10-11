@@ -146,7 +146,50 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify(putBody),
       }
     );
-    if (!putRes.ok) {
+    
+    // Handle 409 conflict with retry (race condition case)
+    if (!putRes.ok && putRes.status === 409 && !existingSha) {
+      console.log("409 conflict detected, retrying with SHA...");
+      
+      // Fetch the file SHA now that we know it exists
+      const retryCheckRes = await fetch(
+        `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(runPath)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`,
+            Accept: "application/vnd.github+json",
+          },
+        }
+      );
+      
+      if (retryCheckRes.ok) {
+        const retryCheckData = await retryCheckRes.json();
+        putBody.sha = retryCheckData.sha;
+        
+        // Retry the PUT with SHA
+        const retryPutRes = await fetch(
+          `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(runPath)}`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${session.accessToken}`,
+              Accept: "application/vnd.github+json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(putBody),
+          }
+        );
+        
+        if (!retryPutRes.ok) {
+          const text = await retryPutRes.text();
+          return new Response(text, { status: retryPutRes.status });
+        }
+        // Success on retry, continue
+      } else {
+        const text = await putRes.text();
+        return new Response(text, { status: putRes.status });
+      }
+    } else if (!putRes.ok) {
       const text = await putRes.text();
       return new Response(text, { status: putRes.status });
     }
