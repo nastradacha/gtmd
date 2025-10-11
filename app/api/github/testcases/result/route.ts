@@ -165,52 +165,9 @@ export async function POST(req: NextRequest) {
       return new Response(text, { status: putRes.status });
     }
 
-    // Create/update latest.json index for fast lookups
-    const latestPath = `${runDir}/latest.json`;
-    const latestPayload = {
-      result,
-      executed_at: timestamp,
-      executed_by: login,
-      run_file: runFilename,
-      updated_at: timestamp,
-    };
-
-    // Check if latest.json exists to get its SHA
-    const latestCheckRes = await fetch(
-      `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(latestPath)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          Accept: "application/vnd.github+json",
-        },
-      }
-    );
-
-    const latestPutBody: any = {
-      message: `Update latest run index for ${path}`,
-      content: Buffer.from(JSON.stringify(latestPayload, null, 2)).toString("base64"),
-      branch: "main", // Commit directly to main
-    };
-
-    // If latest.json exists, include its SHA for update
-    if (latestCheckRes.ok) {
-      const latestData = await latestCheckRes.json();
-      latestPutBody.sha = latestData.sha;
-    }
-
-    await fetch(
-      `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(latestPath)}`,
-      {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          Accept: "application/vnd.github+json",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(latestPutBody),
-      }
-    );
-    // Don't fail the whole operation if latest.json update fails
+    // Skip latest.json update during bulk submissions to avoid race conditions
+    // The traceability matrix will scan all run files anyway
+    // TODO: Add a background job to update latest.json indices after bulk sessions
 
     return new Response(
       JSON.stringify({ 
