@@ -81,14 +81,27 @@ export async function POST(req: NextRequest) {
     const filename = `TC-${tcId}-${slug}.md`;
     const branchName = `testcase/tc-${tcId}-${slug}`;
 
-    // Helper to format multi-line YAML values
-    const formatYamlMultiline = (value: string) => {
-      if (!value || !value.includes('\n')) {
+    // Helper to format YAML values safely (handles special chars and multi-line)
+    const formatYamlValue = (value: string) => {
+      if (!value) return quote(value);
+      
+      // Special YAML characters that need quoting or block literals
+      const hasSpecialChars = /[:\[\]{}#@&*!|>'"%]/.test(value);
+      const hasNewlines = value.includes('\n');
+      
+      // Use block literal for multi-line content (allows any characters)
+      if (hasNewlines) {
+        const lines = value.split('\n').map(line => `  ${line}`).join('\n');
+        return `|\n${lines}`;
+      }
+      
+      // Use quoted string for single-line with special chars
+      if (hasSpecialChars) {
         return quote(value);
       }
-      // Use YAML block scalar (pipe) for multi-line content
-      const lines = value.split('\n').map(line => `  ${line}`).join('\n');
-      return `|\n${lines}`;
+      
+      // Safe to use unquoted
+      return quote(value);
     };
 
     // Create markdown content with audit metadata
@@ -97,8 +110,8 @@ title: ${quote(title)}
 story_id: ${quote(story_id || "")}
 priority: ${quote(priority || "P2")}
 suite: ${quote(suite || "General")}
-${component ? `component: ${quote(component)}\n` : ""}${preconditions ? `preconditions: ${formatYamlMultiline(preconditions)}\n` : ""}${data ? `data: ${quote(data)}\n` : ""}steps: ${formatYamlMultiline(steps)}
-expected: ${formatYamlMultiline(expected)}
+${component ? `component: ${quote(component)}\n` : ""}${preconditions ? `preconditions: ${formatYamlValue(preconditions)}\n` : ""}${data ? `data: ${quote(data)}\n` : ""}steps: ${formatYamlValue(steps)}
+expected: ${formatYamlValue(expected)}
 ${env ? `env: ${quote(env)}\n` : ""}status: "Draft"
 created: ${quote(new Date().toISOString())}
 created_by: ${quote(login)}
