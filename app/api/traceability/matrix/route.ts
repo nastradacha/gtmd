@@ -119,7 +119,38 @@ export async function GET(req: Request) {
       return null;
     }
 
-    // Build story index by numeric ID for flexible matching
+    // Helper to extract custom story ID from story (e.g., "MS-005", "US-V-001")
+    function extractCustomStoryId(story: any): string | null {
+      // Try to find story ID in GitHub issue title (common pattern: "MS-005 · Story Title" or "MS-005: Story Title")
+      if (story.title) {
+        const titleMatch = story.title.match(/^((?:MS|US(?:-V)?)-\d+)\s*[·:·]/);
+        if (titleMatch) return titleMatch[1];
+      }
+      
+      // Try YAML frontmatter in body
+      if (story.body) {
+        const fmMatch = story.body.match(/^---\s*\r?\n([\s\S]+?)\r?\n---/);
+        if (fmMatch) {
+          const meta = parseYamlFrontmatter(story.body);
+          if (meta.story_id) return meta.story_id;
+          if (meta.id) return meta.id;
+        }
+        
+        // Try common patterns in body
+        const idMatch = story.body.match(/(?:story[_\s-]?id|^id)\s*:\s*((?:MS|US(?:-V)?)-\d+)/im);
+        if (idMatch) return idMatch[1];
+      }
+      
+      return null;
+    }
+
+    // Parse custom story IDs and attach to story objects
+    for (const s of stories) {
+      const customId = extractCustomStoryId(s);
+      s._customId = customId; // Store for later use
+    }
+
+    // Build story index by numeric ID AND custom ID for flexible matching
     const storyIndex = new Map<string, any>();
     for (const s of stories) {
       const numStr = String(s.number);
@@ -128,6 +159,11 @@ export async function GET(req: Request) {
       storyIndex.set(`#${numStr}`, s);
       storyIndex.set(`MS-${numStr}`, s); // Support MS prefix
       storyIndex.set(`US-V-${numStr}`, s); // Support US-V prefix
+      
+      // Add custom ID to index if present
+      if (s._customId) {
+        storyIndex.set(s._customId, s);
+      }
     }
 
     // 2) Fetch test cases from TESTCASES_REPO main
@@ -329,14 +365,30 @@ export async function GET(req: Request) {
     for (const s of stories) {
       const numStr = String(s.number);
       const keys = new Set([numStr, `US-${numStr}`, `#${numStr}`, `MS-${numStr}`, `US-V-${numStr}`]);
+      
+      // Add custom story ID to keys if present
+      if (s._customId) {
+        keys.add(s._customId);
+      }
+      
       const testsForStory = testCases.filter((tc) => {
         if (!tc.story_id) return false;
         const storyIdStr = String(tc.story_id);
-        // Direct match
+        
+        // 1. Direct match (including custom ID like "MS-005")
         if (keys.has(storyIdStr)) return true;
-        // Extract numeric part and match (e.g., MS-001 -> 1 matches story #1)
-        const extractedNum = extractNumericId(storyIdStr);
-        return extractedNum === numStr;
+        
+        // 2. Check against custom ID directly
+        if (s._customId && storyIdStr === s._customId) return true;
+        
+        // 3. Fallback: Extract numeric part and match (e.g., MS-001 -> 1 matches story #1)
+        // Only use this if story doesn't have a custom ID to avoid false matches
+        if (!s._customId) {
+          const extractedNum = extractNumericId(storyIdStr);
+          if (extractedNum === numStr) return true;
+        }
+        
+        return false;
       });
 
       if (testsForStory.length === 0) {
@@ -371,7 +423,8 @@ export async function GET(req: Request) {
 
       storiesOut.push({
         number: s.number,
-        key: `US-${s.number}`,
+        key: s._customId || `US-${s.number}`, // Use custom ID if available, otherwise GitHub issue number
+        customId: s._customId || null, // Expose custom ID separately
         title: s.title,
         url: s.html_url,
         assignees: s.assignees?.map((a: any) => a.login) || [],
