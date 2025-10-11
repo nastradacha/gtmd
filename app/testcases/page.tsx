@@ -428,10 +428,10 @@ export default function TestCasesPage() {
           .join('\n');
       }
 
-      // Normalize story_id to just the number (MS-005 -> 5)
+      // Keep original story_id format (MS-005, US-V-001, etc.)
       const normalizedFormData = {
         ...formData,
-        story_id: formData.story_id ? (extractStoryNumber(formData.story_id) || formData.story_id) : "",
+        story_id: formData.story_id?.trim() || "",
         steps: stepsText,
         expected: expectedText,
         preconditions: preconditionsText,
@@ -1096,7 +1096,7 @@ export default function TestCasesPage() {
                               {metadata.story_id && (
                                 <div>
                                   <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">Story</div>
-                                  <div className="text-sm text-gray-700 font-medium">#{metadata.story_id}</div>
+                                  <div className="text-sm text-gray-700 font-medium">{metadata.story_id}</div>
                                 </div>
                               )}
                               {metadata.priority && (
