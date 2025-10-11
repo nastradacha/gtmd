@@ -105,7 +105,35 @@ export async function POST(req: NextRequest) {
       executed_at: timestamp,
     };
 
-    // Create result file directly on main (no PR needed for automated test results)
+    // Check if result file already exists (to handle 409 conflicts)
+    let existingSha: string | null = null;
+    const checkRes = await fetch(
+      `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(runPath)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          Accept: "application/vnd.github+json",
+        },
+      }
+    );
+    
+    if (checkRes.ok) {
+      const checkData = await checkRes.json();
+      existingSha = checkData.sha;
+    }
+
+    // Create or update result file directly on main (no PR needed for automated test results)
+    const putBody: any = {
+      message: `Record test result: ${result} by ${login}`,
+      content: Buffer.from(JSON.stringify(payload, null, 2)).toString("base64"),
+      branch: "main", // Commit directly to main
+    };
+    
+    // Include SHA if file exists (for update)
+    if (existingSha) {
+      putBody.sha = existingSha;
+    }
+
     const putRes = await fetch(
       `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(runPath)}`,
       {
@@ -115,11 +143,7 @@ export async function POST(req: NextRequest) {
           Accept: "application/vnd.github+json",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          message: `Record test result: ${result} by ${login}`,
-          content: Buffer.from(JSON.stringify(payload, null, 2)).toString("base64"),
-          branch: "main", // Commit directly to main
-        }),
+        body: JSON.stringify(putBody),
       }
     );
     if (!putRes.ok) {
