@@ -2,16 +2,20 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import yaml from "js-yaml";
 
-function parseFrontmatter(content: string): Record<string, any> {
+function parseFrontmatter(content: string, filePath?: string): Record<string, any> {
   const fmMatch = content.match(/^---\s*\r?\n([\s\S]+?)\r?\n---/);
   if (!fmMatch) return {};
   
   try {
     const parsed = yaml.load(fmMatch[1]) as Record<string, any>;
     return parsed || {};
-  } catch (e) {
-    console.error("Failed to parse frontmatter:", e);
-    return {};
+  } catch (e: any) {
+    const errorMsg = filePath 
+      ? `Failed to parse YAML frontmatter in ${filePath}: ${e.message || e}`
+      : `Failed to parse YAML frontmatter: ${e.message || e}`;
+    console.error(errorMsg, e);
+    // Return error info so it can be surfaced to user
+    return { _parseError: errorMsg };
   }
 }
 
@@ -128,8 +132,19 @@ export async function GET(req: Request) {
           if (!res.ok) return;
           const data = await res.json();
           const content = Buffer.from(data.content || "", "base64").toString("utf-8");
-          const meta = parseFrontmatter(content);
+          const meta = parseFrontmatter(content, p);
           const entry = map.get(p);
+          
+          // Check for parse errors
+          if (meta._parseError) {
+            console.error(`Skipping ${p} due to YAML error:`, meta._parseError);
+            if (entry) {
+              entry.title = `⚠️ YAML Error in file`;
+              entry._parseError = meta._parseError;
+            }
+            return;
+          }
+          
           if (entry && Object.keys(meta).length) {
             if (meta.title) entry.title = meta.title;
             if (meta.story_id) entry.story_id = meta.story_id;
@@ -186,8 +201,14 @@ export async function GET(req: Request) {
               if (contentRes.ok) {
                 const contentData = await contentRes.json();
                 const content = Buffer.from(contentData.content || "", "base64").toString("utf-8");
-                const meta = parseFrontmatter(content);
-                if (Object.keys(meta).length) {
+                const meta = parseFrontmatter(content, filename);
+                
+                // Check for parse errors
+                if (meta._parseError) {
+                  console.error(`Skipping pending file ${filename} due to YAML error:`, meta._parseError);
+                  entry.title = `⚠️ YAML Error in file`;
+                  entry._parseError = meta._parseError;
+                } else if (Object.keys(meta).length) {
                   if (meta.title) entry.title = meta.title;
                   if (meta.story_id) entry.story_id = meta.story_id;
                   if (meta.suite) entry.suite = meta.suite;
