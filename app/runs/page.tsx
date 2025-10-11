@@ -170,7 +170,7 @@ export default function RunsPage() {
       );
 
       setSuccessMessage(
-        `Session "${sessionMetadata.name}" completed! ${executed.length} test(s) submitted. PRs created and will be auto-merged.`
+        `Session "${sessionMetadata.name}" completed! ${executed.length} test(s) submitted successfully.`
       );
       
       // Reset session

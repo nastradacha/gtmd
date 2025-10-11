@@ -96,8 +96,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const branchName = `testrun/${ms}`;
-
     const payload = {
       path,
       storyId: storyId || null,
@@ -105,40 +103,9 @@ export async function POST(req: NextRequest) {
       notes: notes || "",
       executed_by: login,
       executed_at: timestamp,
-      branch: branchName,
     };
 
-    // Get base main
-    const refRes = await fetch(
-      `https://api.github.com/repos/${owner}/${name}/git/ref/heads/main`,
-      {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          Accept: "application/vnd.github+json",
-        },
-      }
-    );
-    if (!refRes.ok) {
-      throw new Error(`Failed to get base branch: ${refRes.status}`);
-    }
-    const refData = await refRes.json();
-    const sha = refData.object.sha;
-
-    // Create branch for test run
-    const branchRes = await fetch(`https://api.github.com/repos/${owner}/${name}/git/refs`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-        Accept: "application/vnd.github+json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha }),
-    });
-    if (!branchRes.ok) {
-      throw new Error(`Failed to create branch: ${branchRes.status}`);
-    }
-
-    // Create result file
+    // Create result file directly on main (no PR needed for automated test results)
     const putRes = await fetch(
       `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(runPath)}`,
       {
@@ -151,7 +118,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           message: `Record test result: ${result} by ${login}`,
           content: Buffer.from(JSON.stringify(payload, null, 2)).toString("base64"),
-          branch: branchName,
+          branch: "main", // Commit directly to main
         }),
       }
     );
@@ -172,7 +139,7 @@ export async function POST(req: NextRequest) {
 
     // Check if latest.json exists to get its SHA
     const latestCheckRes = await fetch(
-      `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(latestPath)}?ref=${branchName}`,
+      `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(latestPath)}`,
       {
         headers: {
           Authorization: `Bearer ${session.accessToken}`,
@@ -184,7 +151,7 @@ export async function POST(req: NextRequest) {
     const latestPutBody: any = {
       message: `Update latest run index for ${path}`,
       content: Buffer.from(JSON.stringify(latestPayload, null, 2)).toString("base64"),
-      branch: branchName,
+      branch: "main", // Commit directly to main
     };
 
     // If latest.json exists, include its SHA for update
@@ -207,29 +174,14 @@ export async function POST(req: NextRequest) {
     );
     // Don't fail the whole operation if latest.json update fails
 
-    // Create PR for run log
-    const prRes = await fetch(`https://api.github.com/repos/${owner}/${name}/pulls`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-        Accept: "application/vnd.github+json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        title: `Test Run: ${result.toUpperCase()} - ${path}`,
-        body: `Automated test run logged by ${login} for ${path} at ${timestamp}. Result: ${result.toUpperCase()}.`,
-        head: branchName,
-        base: "main",
-      }),
-    });
-    if (!prRes.ok) {
-      const text = await prRes.text();
-      return new Response(text, { status: prRes.status });
-    }
-    const prData = await prRes.json();
-
     return new Response(
-      JSON.stringify({ success: true, pr: { number: prData.number, url: prData.html_url } }),
+      JSON.stringify({ 
+        success: true, 
+        message: `Test result recorded: ${result.toUpperCase()}`,
+        path,
+        result,
+        executed_at: timestamp
+      }),
       { status: 201 }
     );
   } catch (error: any) {
