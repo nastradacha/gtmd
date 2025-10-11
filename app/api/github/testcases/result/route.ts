@@ -127,10 +127,10 @@ export async function POST(req: NextRequest) {
       }
     );
     
-    // If 409 conflict, file already exists - try to update it with SHA
+    // If 409 conflict, verify file exists before treating as success
     if (putRes.status === 409) {
-      console.log("409 conflict - file exists, fetching SHA to update...");
-      const checkRes = await fetch(
+      console.log("409 conflict - checking if file actually exists...");
+      const verifyRes = await fetch(
         `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(runPath)}`,
         {
           headers: {
@@ -140,12 +140,29 @@ export async function POST(req: NextRequest) {
         }
       );
       
-      if (checkRes.ok) {
-        const checkData = await checkRes.json();
-        putBody.sha = checkData.sha;
+      if (verifyRes.ok) {
+        // File exists, parallel request created it - treat as success
+        console.log("File exists, parallel request handled it");
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: `Test result recorded by parallel request`,
+            path,
+            result,
+            executed_at: timestamp,
+            note: "File created by concurrent request"
+          }),
+          { status: 201 }
+        );
+      } else {
+        // File doesn't exist but got 409 - GitHub issue, try with new filename
+        console.log("File doesn't exist despite 409, trying new filename...");
+        const extraRandom = Math.random().toString(36).substring(2, 8);
+        runFilename = `run-${ms}-${randomSuffix}-${extraRandom}.json`;
+        const newRunPath = `${runDir}/${runFilename}`;
         
-        putRes = await fetch(
-          `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(runPath)}`,
+        const retryRes = await fetch(
+          `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(newRunPath)}`,
           {
             method: "PUT",
             headers: {
@@ -153,13 +170,25 @@ export async function POST(req: NextRequest) {
               Accept: "application/vnd.github+json",
               "Content-Type": "application/json",
             },
-            body: JSON.stringify(putBody),
+            body: JSON.stringify({
+              message: `Record test result: ${result} by ${login}`,
+              content: Buffer.from(JSON.stringify(payload, null, 2)).toString("base64"),
+              branch: "main",
+            }),
           }
         );
+        
+        if (!retryRes.ok) {
+          const text = await retryRes.text();
+          console.error("Retry with new filename also failed:", text);
+          return new Response(text, { status: retryRes.status });
+        }
+        
+        putRes = retryRes; // Continue with successful response
       }
     }
     
-    // If still not OK, return error
+    // If other error, return it
     if (!putRes.ok) {
       const text = await putRes.text();
       return new Response(text, { status: putRes.status });
