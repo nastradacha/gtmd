@@ -107,25 +107,55 @@ export async function POST(req: NextRequest) {
       executed_at: timestamp,
     };
 
-    // Try to create the file directly (GitHub will create directory structure)
-    const putBody: any = {
-      message: `Record test result: ${result} by ${login}`,
-      content: Buffer.from(JSON.stringify(payload, null, 2)).toString("base64"),
-      branch: "main",
-    };
+    // Helper function to create file with retry on branch SHA conflicts
+    async function createFileWithRetry(maxAttempts = 3): Promise<Response> {
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const putBody: any = {
+          message: `Record test result: ${result} by ${login}`,
+          content: Buffer.from(JSON.stringify(payload, null, 2)).toString("base64"),
+          branch: "main",
+        };
 
-    let putRes = await fetch(
-      `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(runPath)}`,
-      {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          Accept: "application/vnd.github+json",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(putBody),
+        const putRes = await fetch(
+          `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(runPath)}`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${session.accessToken}`,
+              Accept: "application/vnd.github+json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(putBody),
+          }
+        );
+
+        // Success!
+        if (putRes.ok) {
+          return putRes;
+        }
+
+        // If not 409, return error immediately
+        if (putRes.status !== 409) {
+          return putRes;
+        }
+
+        // If last attempt, return the error
+        if (attempt === maxAttempts) {
+          console.log(`Failed after ${maxAttempts} attempts`);
+          return putRes;
+        }
+
+        // 409 conflict - wait and retry with exponential backoff
+        const waitMs = Math.min(100 * Math.pow(2, attempt - 1), 1000); // 100ms, 200ms, 400ms, max 1s
+        console.log(`Attempt ${attempt} failed with 409, retrying in ${waitMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, waitMs));
       }
-    );
+
+      // Should never reach here, but TypeScript needs it
+      throw new Error("Unexpected retry loop exit");
+    }
+
+    let putRes = await createFileWithRetry(5); // Try up to 5 times
     
     // If 409 conflict, verify file exists before treating as success
     if (putRes.status === 409) {
