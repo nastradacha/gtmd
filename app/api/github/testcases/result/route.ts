@@ -129,7 +129,10 @@ export async function POST(req: NextRequest) {
     
     // If 409 conflict, verify file exists before treating as success
     if (putRes.status === 409) {
-      console.log("409 conflict - checking if file actually exists...");
+      const errorText = await putRes.text();
+      console.log("409 conflict on initial request:", errorText);
+      console.log("Attempted path:", runPath);
+      console.log("Checking if file actually exists...");
       const verifyRes = await fetch(
         `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(runPath)}`,
         {
@@ -180,8 +183,26 @@ export async function POST(req: NextRequest) {
         
         if (!retryRes.ok) {
           const text = await retryRes.text();
-          console.error("Retry with new filename also failed:", text);
-          return new Response(text, { status: retryRes.status });
+          console.error("Retry with new filename also failed:", retryRes.status, text);
+          
+          // Parse error to understand what's happening
+          try {
+            const errorData = JSON.parse(text);
+            console.error("GitHub error details:", errorData);
+          } catch (e) {
+            console.error("Could not parse error response");
+          }
+          
+          return new Response(
+            JSON.stringify({
+              error: "Failed to create test run after retry",
+              details: text,
+              status: retryRes.status,
+              path: runPath,
+              newPath: newRunPath
+            }),
+            { status: retryRes.status }
+          );
         }
         
         putRes = retryRes; // Continue with successful response
