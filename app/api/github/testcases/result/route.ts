@@ -51,9 +51,11 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const ms = now.getTime();
     const timestamp = now.toISOString();
+    // Add random suffix to prevent collisions in bulk submissions
+    const randomSuffix = Math.random().toString(36).substring(2, 8);
     // Encode path: replace / with __ (dots are allowed in filenames)
     const runDir = `qa-runs/${path.replace(/\//g, "__")}`;
-    const runFilename = `run-${ms}.json`;
+    const runFilename = `run-${ms}-${randomSuffix}.json`;
     const runPath = `${runDir}/${runFilename}`;
 
     // Check latest run to avoid duplicate PRs for identical result+notes
@@ -70,7 +72,7 @@ export async function POST(req: NextRequest) {
     if (listRes.ok) {
       const list = await listRes.json();
       const runs = (Array.isArray(list) ? list : [])
-        .filter((x: any) => x.type === "file" && /run-\d+\.json$/.test(x.name))
+        .filter((x: any) => x.type === "file" && /run-\d+(-[a-z0-9]+)?\.json$/.test(x.name))
         .sort((a: any, b: any) => {
           const na = parseInt(a.name.replace(/\D/g, ""), 10);
           const nb = parseInt(b.name.replace(/\D/g, ""), 10);

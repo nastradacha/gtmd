@@ -63,12 +63,12 @@ export async function GET(req: Request) {
 
       const files = await contentsRes.json();
       const runs = files
-        .filter((f: any) => f.type === "file" && /run-\d+\.json$/.test(f.name))
+        .filter((f: any) => f.type === "file" && /run-\d+(-[a-z0-9]+)?\.json$/.test(f.name))
         .map((f: any) => ({
           path: f.path,
           name: f.name,
           sha: f.sha,
-          timestamp: f.name.match(/run-(\d+)\.json$/)?.[1],
+          timestamp: f.name.match(/run-(\d+)(?:-[a-z0-9]+)?\.json$/)?.[1],
         }))
         .sort((a: any, b: any) => parseInt(b.timestamp) - parseInt(a.timestamp));
 
@@ -99,8 +99,8 @@ export async function GET(req: Request) {
     for (const entry of treeData.tree || []) {
       if (entry.type === "blob" && typeof entry.path === "string") {
         const p = entry.path as string;
-        if (p.startsWith("qa-runs/") && /run-\d+\.json$/.test(p)) {
-          const msMatch = p.match(/run-(\d+)\.json$/);
+        if (p.startsWith("qa-runs/") && /run-\d+(-[a-z0-9]+)?\.json$/.test(p)) {
+          const msMatch = p.match(/run-(\d+)(?:-[a-z0-9]+)?\.json$/);
           const timestamp = msMatch ? msMatch[1] : "0";
           runFiles.push({
             path: p,
@@ -210,10 +210,10 @@ export async function DELETE(req: Request) {
       if (contentsRes.ok) {
         const files = await contentsRes.json();
         const remainingRuns = files
-          .filter((f: any) => f.type === "file" && /run-\d+\.json$/.test(f.name))
+          .filter((f: any) => f.type === "file" && /run-\d+(-[a-z0-9]+)?\.json$/.test(f.name))
           .map((f: any) => ({
             name: f.name,
-            timestamp: parseInt(f.name.match(/run-(\d+)\.json$/)?.[1] || "0"),
+            timestamp: parseInt(f.name.match(/run-(\d+)(?:-[a-z0-9]+)?\.json$/)?.[1] || "0"),
           }))
           .sort((a: any, b: any) => b.timestamp - a.timestamp);
 

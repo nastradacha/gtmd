@@ -81,7 +81,7 @@ export async function GET() {
         entry.type === "blob" &&
         typeof entry.path === "string" &&
         entry.path.startsWith("qa-runs/") &&
-        /run-\d+\.json$/.test(entry.path)
+        /run-\d+(-[a-z0-9]+)?\.json$/.test(entry.path)
       ) {
         const p = entry.path as string;
         const dir = p.substring(0, p.lastIndexOf("/"));
@@ -105,7 +105,7 @@ export async function GET() {
         continue;
       }
       const latest = files
-        .map((fp) => ({ fp, ts: parseInt(fp.replace(/.*run-(\d+)\.json$/, "$1"), 10) }))
+        .map((fp) => ({ fp, ts: parseInt(fp.replace(/.*run-(\d+)(?:-[a-z0-9]+)?\.json$/, "$1"), 10) }))
         .sort((a, b) => b.ts - a.ts)[0];
       try {
         const contentsRes = await fetch(`https://api.github.com/repos/${owner}/${name}/contents/${latest.fp}`, {

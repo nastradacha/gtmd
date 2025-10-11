@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
 
         const list = await listRes.json();
         const runFiles = (Array.isArray(list) ? list : [])
-          .filter((x: any) => x.type === "file" && /run-\d+\.json$/.test(x.name))
+          .filter((x: any) => x.type === "file" && /run-\d+(-[a-z0-9]+)?\.json$/.test(x.name))
           .sort((a: any, b: any) => {
             const na = parseInt(a.name.replace(/\D/g, ""), 10);
             const nb = parseInt(b.name.replace(/\D/g, ""), 10);

@@ -194,9 +194,9 @@ export async function GET(req: Request) {
         if (p.startsWith("qa-testcases/") && p.endsWith(".md")) {
           testFiles.push(p);
         }
-        if (p.startsWith("qa-runs/") && /run-\d+\.json$/.test(p)) {
+        if (p.startsWith("qa-runs/") && /run-\d+(-[a-z0-9]+)?\.json$/.test(p)) {
           const runDir = p.substring(0, p.lastIndexOf("/"));
-          const msMatch = p.match(/run-(\d+)\.json$/);
+          const msMatch = p.match(/run-(\d+)(?:-[a-z0-9]+)?\.json$/);
           const ms = msMatch ? parseInt(msMatch[1], 10) : 0;
           runFiles.push({ path: p, ms, runDir });
         }

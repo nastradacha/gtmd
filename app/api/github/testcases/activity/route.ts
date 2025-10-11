@@ -72,12 +72,12 @@ export async function GET(req: Request) {
       .filter((entry: any) => 
         entry.type === "blob" && 
         entry.path.startsWith("qa-runs/") && 
-        /run-\d+\.json$/.test(entry.path)
+        /run-\d+(-[a-z0-9]+)?\.json$/.test(entry.path)
       )
       .map((entry: any) => ({
         path: entry.path,
         sha: entry.sha,
-        timestamp: parseInt(entry.path.match(/run-(\d+)\.json$/)?.[1] || "0", 10),
+        timestamp: parseInt(entry.path.match(/run-(\d+)(?:-[a-z0-9]+)?\.json$/)?.[1] || "0", 10),
       }))
       .sort((a: any, b: any) => b.timestamp - a.timestamp)
       .slice(0, limit * 2); // Fetch more than needed in case some are filtered
