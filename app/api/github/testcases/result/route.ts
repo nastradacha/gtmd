@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     const randomSuffix = Math.random().toString(36).substring(2, 8);
     // Encode path: replace / with __ (dots are allowed in filenames)
     const runDir = `qa-runs/${path.replace(/\//g, "__")}`;
-    const runFilename = `run-${ms}-${randomSuffix}.json`;
+    let runFilename = `run-${ms}-${randomSuffix}.json`;
     const runPath = `${runDir}/${runFilename}`;
 
     // Check latest run to avoid duplicate PRs for identical result+notes
@@ -204,18 +204,38 @@ export async function POST(req: NextRequest) {
         }
         // Success on retry, continue
       } else {
-        // File doesn't exist even though we got 409? Treat as success anyway
-        console.log("409 but file not found on retry, treating as success");
-        return new Response(
-          JSON.stringify({ 
-            success: true, 
-            message: `Test result accepted despite 409`,
-            path,
-            result,
-            executed_at: timestamp
-          }),
-          { status: 201 }
+        // File doesn't exist even though we got 409 - this shouldn't happen
+        // Try one more time with a different filename (add extra random suffix)
+        console.log("409 but file not found on retry, trying with new unique filename...");
+        const extraSuffix = Math.random().toString(36).substring(2, 8);
+        runFilename = `run-${ms}-${randomSuffix}-${extraSuffix}.json`;
+        const newRunPath = `${runDir}/${runFilename}`;
+        
+        const finalPutRes = await fetch(
+          `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(newRunPath)}`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${session.accessToken}`,
+              Accept: "application/vnd.github+json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              message: `Record test result: ${result} by ${login}`,
+              content: Buffer.from(JSON.stringify(payload, null, 2)).toString("base64"),
+              branch: "main",
+            }),
+          }
         );
+        
+        if (!finalPutRes.ok) {
+          const text = await finalPutRes.text();
+          console.error("Final attempt failed:", text);
+          return new Response(text, { status: finalPutRes.status });
+        }
+        
+        // runFilename is already updated above, will be used in latest.json
+        // Continue to latest.json update
       }
     } else if (!putRes.ok) {
       const text = await putRes.text();
