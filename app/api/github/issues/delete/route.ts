@@ -54,12 +54,13 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    // GitHub API endpoint to delete an issue
-    // Note: This requires delete permissions on the repo
-    const res = await fetch(
+    // GitHub doesn't support deleting issues via API
+    // Instead, we close it and add a "test" label so it can be filtered out
+    
+    // First, get the current issue to preserve existing labels
+    const getRes = await fetch(
       `https://api.github.com/repos/${owner}/${name}/issues/${issue_number}`,
       {
-        method: "DELETE",
         headers: {
           Authorization: `Bearer ${session.accessToken}`,
           Accept: "application/vnd.github+json",
@@ -67,13 +68,47 @@ export async function DELETE(req: NextRequest) {
       }
     );
 
-    if (!res.ok) {
-      const text = await res.text();
-      return new Response(text, { status: res.status });
+    if (!getRes.ok) {
+      const text = await getRes.text();
+      return new Response(text, { status: getRes.status });
+    }
+
+    const issue = await getRes.json();
+    const currentLabels = issue.labels.map((l: any) => l.name);
+    
+    // Add "test" label if not already present
+    const updatedLabels = currentLabels.includes("test") 
+      ? currentLabels 
+      : [...currentLabels, "test"];
+
+    // Close the issue and add "test" label
+    const patchRes = await fetch(
+      `https://api.github.com/repos/${owner}/${name}/issues/${issue_number}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          Accept: "application/vnd.github+json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          state: "closed",
+          labels: updatedLabels,
+          state_reason: "not_planned", // Mark as not planned (vs completed)
+        }),
+      }
+    );
+
+    if (!patchRes.ok) {
+      const text = await patchRes.text();
+      return new Response(text, { status: patchRes.status });
     }
 
     return new Response(
-      JSON.stringify({ success: true, message: "Issue deleted" }),
+      JSON.stringify({ 
+        success: true, 
+        message: "Issue closed and marked as 'test'" 
+      }),
       { status: 200 }
     );
   } catch (error: any) {

@@ -220,7 +220,7 @@ export default function DefectsPage() {
     if (!selectedDefect) return;
     
     const confirmed = window.confirm(
-      `Are you sure you want to DELETE issue #${selectedDefect.number}?\n\n"${selectedDefect.title}"\n\nThis action cannot be undone.`
+      `Close and mark issue #${selectedDefect.number} as "test"?\n\n"${selectedDefect.title}"\n\nThis will close the issue and add a "test" label so it can be filtered out from reports.`
     );
     
     if (!confirmed) return;
@@ -237,13 +237,13 @@ export default function DefectsPage() {
       });
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(text || "Failed to delete defect");
+        throw new Error(text || "Failed to close defect");
       }
-      setStatusMessage("Defect deleted.");
+      setStatusMessage("Issue closed and marked as 'test'.");
       setSelectedDefect(null);
       await fetchDefects();
     } catch (e: any) {
-      setStatusMessage(e.message || "Failed to delete defect");
+      setStatusMessage(e.message || "Failed to close defect");
     } finally {
       setActionLoading(false);
     }
@@ -836,9 +836,10 @@ ${formData.description}
                   <button
                     onClick={deleteDefect}
                     disabled={actionLoading}
-                    className="px-3 py-1.5 rounded bg-red-600 text-white text-sm hover:bg-red-700 disabled:opacity-50"
+                    className="px-3 py-1.5 rounded bg-orange-600 text-white text-sm hover:bg-orange-700 disabled:opacity-50"
+                    title="Close and mark as test (GitHub doesn't support deleting issues)"
                   >
-                    {actionLoading ? "Deleting..." : "Delete Issue"}
+                    {actionLoading ? "Closing..." : "Mark as Test"}
                   </button>
                 </div>
               </div>
