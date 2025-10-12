@@ -12,12 +12,27 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
 
-  const repoUrl = process.env.NEXT_PUBLIC_GITHUB_REPO_URL || "";
-  const match = repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
-  if (!match) {
-    return new Response(JSON.stringify({ error: "Invalid repository URL" }), { status: 500 });
+  // Use the same repo parsing as single-result endpoint
+  const repoEnv = process.env.TESTCASES_REPO;
+  if (!repoEnv) {
+    return new Response(JSON.stringify({ error: "TESTCASES_REPO not configured" }), { status: 500 });
   }
-  const [, owner, name] = match;
+
+  let owner: string | undefined;
+  let name: string | undefined;
+  if (repoEnv.includes("github.com")) {
+    const u = new URL(repoEnv);
+    const parts = u.pathname.replace(/^\/+|\.git$/g, "").split("/");
+    owner = parts[parts.length - 2];
+    name = parts[parts.length - 1];
+  } else {
+    const parts = repoEnv.split("/");
+    owner = parts[0];
+    name = parts[1];
+  }
+  if (!owner || !name) {
+    return new Response(JSON.stringify({ error: "Invalid TESTCASES_REPO" }), { status: 500 });
+  }
 
   try {
     const { results } = await req.json();
