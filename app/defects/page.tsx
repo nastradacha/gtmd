@@ -216,6 +216,39 @@ export default function DefectsPage() {
     }
   }
 
+  async function deleteDefect() {
+    if (!selectedDefect) return;
+    
+    const confirmed = window.confirm(
+      `Are you sure you want to DELETE issue #${selectedDefect.number}?\n\n"${selectedDefect.title}"\n\nThis action cannot be undone.`
+    );
+    
+    if (!confirmed) return;
+
+    try {
+      setActionLoading(true);
+      setStatusMessage(null);
+      const res = await fetch("/api/github/issues/delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          issue_number: selectedDefect.number,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Failed to delete defect");
+      }
+      setStatusMessage("Defect deleted.");
+      setSelectedDefect(null);
+      await fetchDefects();
+    } catch (e: any) {
+      setStatusMessage(e.message || "Failed to delete defect");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
@@ -791,7 +824,7 @@ ${formData.description}
                   </div>
                 ) : null}
 
-                <div className="pt-3 border-t">
+                <div className="pt-3 border-t flex justify-between items-center">
                   <a
                     href={selectedDefect.html_url}
                     target="_blank"
@@ -800,6 +833,13 @@ ${formData.description}
                   >
                     View on GitHub →
                   </a>
+                  <button
+                    onClick={deleteDefect}
+                    disabled={actionLoading}
+                    className="px-3 py-1.5 rounded bg-red-600 text-white text-sm hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {actionLoading ? "Deleting..." : "Delete Issue"}
+                  </button>
                 </div>
               </div>
             </div>
