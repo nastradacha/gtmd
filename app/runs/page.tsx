@@ -149,29 +149,38 @@ export default function RunsPage() {
     setSuccessMessage(null);
 
     try {
-      // Submit each executed test result
-      const results = await Promise.all(
-        executed.map(async (test) => {
-          const res = await fetch("/api/github/testcases/result", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              path: test.path,
-              result: test.result,
-              notes: `[Session: ${sessionMetadata.name}] ${test.notes}\n\nEnvironment: ${sessionMetadata.environment}\nBrowser: ${sessionMetadata.browser || "N/A"}\nBuild: ${sessionMetadata.build || "N/A"}`,
-            }),
-          });
-          if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error || "Failed to submit result");
-          }
-          return await res.json();
-        })
-      );
+      // Submit all test results in a single batch to avoid conflicts
+      const batchPayload = {
+        results: executed.map((test) => ({
+          path: test.path,
+          result: test.result,
+          notes: `[Session: ${sessionMetadata.name}] ${test.notes}\n\nEnvironment: ${sessionMetadata.environment}\nBrowser: ${sessionMetadata.browser || "N/A"}\nBuild: ${sessionMetadata.build || "N/A"}`,
+        })),
+      };
 
-      setSuccessMessage(
-        `Session "${sessionMetadata.name}" completed! ${executed.length} test(s) submitted successfully.`
-      );
+      const res = await fetch("/api/github/testcases/result/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(batchPayload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to submit results");
+      }
+
+      const result = await res.json();
+      
+      if (result.failed > 0) {
+        setSuccessMessage(
+          `Session "${sessionMetadata.name}" completed with warnings! ${result.successful}/${executed.length} test(s) submitted successfully. ${result.failed} failed.`
+        );
+        console.warn("Failed results:", result.failedResults);
+      } else {
+        setSuccessMessage(
+          `Session "${sessionMetadata.name}" completed! ${executed.length} test(s) submitted successfully.`
+        );
+      }
       
       // Reset session
       setSessionActive(false);
