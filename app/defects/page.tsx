@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GitHubIssue, DefectFormData } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -23,6 +23,9 @@ export default function DefectsPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [assignedOnly, setAssignedOnly] = useState(false);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
+  // Screenshot attachments
+  const [screenshotFiles, setScreenshotFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   
   // Story search/autocomplete
   const [storySearch, setStorySearch] = useState("");
@@ -249,14 +252,23 @@ ${formData.description}
 
       const labels = ["bug", formData.severity.toLowerCase()];
 
+      // Build multipart form data to include screenshots
+      const form = new FormData();
+      form.append("title", formData.title);
+      form.append("body", body);
+      form.append("labels", JSON.stringify(labels));
+
+      // Basic validation: limit number and size
+      const maxFiles = 5;
+      const maxBytes = 8 * 1024 * 1024; // 8MB per image
+      const filesToSend = screenshotFiles.slice(0, maxFiles).filter(f => f.size <= maxBytes);
+      for (const f of filesToSend) {
+        form.append("screenshots", f, f.name);
+      }
+
       const res = await fetch("/api/github/issues", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: formData.title,
-          body,
-          labels,
-        }),
+        body: form,
       });
 
       if (!res.ok) throw new Error("Failed to create defect");
@@ -270,6 +282,8 @@ ${formData.description}
         storyId: "",
         testCaseId: "",
       });
+      setScreenshotFiles([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       setStorySearch("");
       setSelectedStory(null);
       setStoryResults([]);
@@ -335,6 +349,32 @@ ${formData.description}
                   className="w-full border rounded px-3 py-2 h-32"
                   placeholder="Detailed description, steps to reproduce, etc."
                 />
+              </div>
+
+              {/* Screenshots */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Screenshots</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  ref={fileInputRef}
+                  onChange={(e) => {
+                    const list = e.target.files ? Array.from(e.target.files) : [];
+                    setScreenshotFiles(list);
+                  }}
+                  className="w-full border rounded px-3 py-2"
+                />
+                <p className="text-xs text-gray-500 mt-1">Optional. Up to 5 images, each ≤ 8MB. PNG/JPG recommended.</p>
+                {screenshotFiles.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {screenshotFiles.slice(0, 5).map((f, i) => (
+                      <div key={i} className="border rounded p-1 text-xs text-gray-700">
+                        {f.name} ({Math.round(f.size / 1024)} KB)
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
