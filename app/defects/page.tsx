@@ -249,6 +249,42 @@ export default function DefectsPage() {
     }
   }
 
+  async function verifyFixed() {
+    if (!selectedDefect) return;
+    
+    const notes = window.prompt(
+      `Verify that issue #${selectedDefect.number} is fixed?\n\n"${selectedDefect.title}"\n\nOptional verification notes (e.g., test case used, environment):`,
+      ""
+    );
+    
+    // User cancelled
+    if (notes === null) return;
+
+    try {
+      setActionLoading(true);
+      setStatusMessage(null);
+      const res = await fetch("/api/github/issues/verify-fixed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          issue_number: selectedDefect.number,
+          verification_notes: notes.trim() || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Failed to verify defect");
+      }
+      setStatusMessage("✅ Defect verified and closed as completed!");
+      setSelectedDefect(null);
+      await fetchDefects();
+    } catch (e: any) {
+      setStatusMessage(e.message || "Failed to verify defect");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
@@ -824,23 +860,39 @@ ${formData.description}
                   </div>
                 ) : null}
 
-                <div className="pt-3 border-t flex justify-between items-center">
-                  <a
-                    href={selectedDefect.html_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline"
-                  >
-                    View on GitHub →
-                  </a>
-                  <button
-                    onClick={deleteDefect}
-                    disabled={actionLoading}
-                    className="px-3 py-1.5 rounded bg-orange-600 text-white text-sm hover:bg-orange-700 disabled:opacity-50"
-                    title="Close and mark as test (GitHub doesn't support deleting issues)"
-                  >
-                    {actionLoading ? "Closing..." : "Mark as Test"}
-                  </button>
+                <div className="pt-3 border-t">
+                  <div className="flex justify-between items-center mb-3">
+                    <a
+                      href={selectedDefect.html_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline"
+                    >
+                      View on GitHub →
+                    </a>
+                  </div>
+                  
+                  {/* Action buttons - only show for open defects */}
+                  {selectedDefect.state === 'open' && (
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={verifyFixed}
+                        disabled={actionLoading}
+                        className="px-3 py-1.5 rounded bg-green-600 text-white text-sm hover:bg-green-700 disabled:opacity-50"
+                        title="Mark as verified fixed and close as completed"
+                      >
+                        {actionLoading ? "Verifying..." : "✓ Verify Fixed"}
+                      </button>
+                      <button
+                        onClick={deleteDefect}
+                        disabled={actionLoading}
+                        className="px-3 py-1.5 rounded bg-orange-600 text-white text-sm hover:bg-orange-700 disabled:opacity-50"
+                        title="Close and mark as test (for cleanup)"
+                      >
+                        {actionLoading ? "Closing..." : "Mark as Test"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
