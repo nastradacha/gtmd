@@ -1214,41 +1214,64 @@ export default function TraceabilityPage() {
                               )}
                             </div>
                           </div>
-                          
                           {isLoadingHistory ? (
                             <div className="text-xs text-gray-500">Loading...</div>
                           ) : history.length > 0 ? (
                             <div>
                               {/* Sparkline */}
                               <div className="flex items-center gap-1 mb-2">
-                                {history.slice(0, 10).reverse().map((run, idx) => (
-                                  <div
-                                    key={idx}
-                                    className={`w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold ${
-                                      run.result === "pass"
-                                        ? "bg-green-500 text-white"
-                                        : run.result === "fail"
-                                        ? "bg-red-500 text-white"
-                                        : "bg-gray-300 text-gray-700"
-                                    }`}
-                                    title={`${run.result.toUpperCase()} - ${new Date(run.executed_at).toLocaleString()}`}
-                                  >
-                                    {run.result === "pass" ? "✓" : run.result === "fail" ? "✗" : "−"}
-                                  </div>
-                                ))}
+                                {history.slice(0, 10).reverse().map((run, idx) => {
+                                  const stepsArr = Array.isArray(run.steps) ? run.steps : [];
+                                  const failS = stepsArr.filter((s: any) => (s?.result || "").toLowerCase() === "fail").length;
+                                  const passS = stepsArr.filter((s: any) => (s?.result || "").toLowerCase() === "pass").length;
+                                  const skipS = stepsArr.filter((s: any) => (s?.result || "").toLowerCase() === "skip").length;
+                                  const stepsTip = stepsArr.length ? ` | Steps: ${failS} fail, ${passS} pass, ${skipS} skip` : "";
+                                  return (
+                                    <div
+                                      key={idx}
+                                      className={`w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold ${
+                                        run.result === "pass"
+                                          ? "bg-green-500 text-white"
+                                          : run.result === "fail"
+                                          ? "bg-red-500 text-white"
+                                          : "bg-gray-300 text-gray-700"
+                                      }`}
+                                      title={`${(run.result || "").toUpperCase()} - ${new Date(run.executed_at).toLocaleString()}${stepsTip}`}
+                                    >
+                                      {run.result === "pass" ? "✓" : run.result === "fail" ? "✗" : "−"}
+                                    </div>
+                                  );
+                                })}
                                 <span className="text-xs text-gray-500 ml-2">
                                   ({history.length} run{history.length !== 1 ? "s" : ""})
                                 </span>
                               </div>
-                              
+
+                              {/* Latest run step summary */}
+                              {Array.isArray(history[0]?.steps) && (
+                                <div className="text-xs text-gray-700 mb-2">
+                                  {(() => {
+                                    const stepsArr = history[0].steps as any[];
+                                    const failS = stepsArr.filter((s: any) => (s?.result || "").toLowerCase() === "fail").length;
+                                    const passS = stepsArr.filter((s: any) => (s?.result || "").toLowerCase() === "pass").length;
+                                    const skipS = stepsArr.filter((s: any) => (s?.result || "").toLowerCase() === "skip").length;
+                                    const total = stepsArr.length;
+                                    return (
+                                      <span>
+                                        Latest run steps: <span className="text-red-700 font-medium">{failS}</span> fail, <span className="text-green-700 font-medium">{passS}</span> pass, <span className="text-yellow-700 font-medium">{skipS}</span> skip{total ? ` (${total} total)` : ""}
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
+                              )}
+
                               {/* Trend indicator */}
                               {history.length >= 3 && (
                                 <div className="text-xs">
                                   {(() => {
                                     const recent3 = history.slice(0, 3);
-                                    const passCount = recent3.filter(r => r.result === "pass").length;
-                                    const failCount = recent3.filter(r => r.result === "fail").length;
-                                    
+                                    const passCount = recent3.filter((r: any) => r.result === "pass").length;
+                                    const failCount = recent3.filter((r: any) => r.result === "fail").length;
                                     if (passCount === 3) {
                                       return <span className="text-green-700">✓ Stable (3/3 passing)</span>;
                                     } else if (failCount === 3) {

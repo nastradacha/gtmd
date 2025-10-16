@@ -16,6 +16,7 @@ type SessionTest = {
   result: "pass" | "fail" | "skip" | null;
   notes: string;
   expanded?: boolean;
+  stepResults?: { name: string; result: "pass" | "fail" | "skip" | null; notes: string }[];
 };
 
 type SessionMetadata = {
@@ -67,6 +68,18 @@ export default function RunsPage() {
     }
   }
 
+  // Parse multi-line steps text into an array of step items
+  function parseStepsText(text?: string) {
+    if (!text) return [] as { name: string; result: "pass" | "fail" | "skip" | null; notes: string }[];
+    // Split by lines and strip any leading numbering like "1. ", "1) ", "1- "
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => l.replace(/^\d+\s*[).:-]\s*/, ""));
+    return lines.map((name) => ({ name, result: null as any, notes: "" }));
+  }
+
   async function fetchTestCases() {
     try {
       setLoading(true);
@@ -109,6 +122,7 @@ export default function RunsPage() {
       result: null,
       notes: "",
       expanded: false,
+      stepResults: parseStepsText(tc.steps),
     }));
 
     setSessionTests(tests);
@@ -130,6 +144,29 @@ export default function RunsPage() {
   function toggleTestExpanded(index: number) {
     const updated = [...sessionTests];
     updated[index].expanded = !updated[index].expanded;
+    setSessionTests(updated);
+  }
+
+  function updateStepResult(testIndex: number, stepIndex: number, value: "pass" | "fail" | "skip") {
+    const updated = [...sessionTests];
+    const steps = updated[testIndex].stepResults || [];
+    if (steps[stepIndex]) steps[stepIndex].result = value;
+    updated[testIndex].stepResults = steps;
+    setSessionTests(updated);
+  }
+
+  function updateStepNotes(testIndex: number, stepIndex: number, notes: string) {
+    const updated = [...sessionTests];
+    const steps = updated[testIndex].stepResults || [];
+    if (steps[stepIndex]) steps[stepIndex].notes = notes;
+    updated[testIndex].stepResults = steps;
+    setSessionTests(updated);
+  }
+
+  function markAllSteps(testIndex: number, value: "pass" | "fail" | "skip") {
+    const updated = [...sessionTests];
+    const steps = (updated[testIndex].stepResults || []).map((s) => ({ ...s, result: value }));
+    updated[testIndex].stepResults = steps;
     setSessionTests(updated);
   }
 
@@ -155,6 +192,12 @@ export default function RunsPage() {
           path: test.path,
           result: test.result,
           notes: `[Session: ${sessionMetadata.name}] ${test.notes}\n\nEnvironment: ${sessionMetadata.environment}\nBrowser: ${sessionMetadata.browser || "N/A"}\nBuild: ${sessionMetadata.build || "N/A"}`,
+          // Optional per-step results if any were recorded
+          ...(test.stepResults && test.stepResults.some((s) => s.result || s.notes)
+            ? {
+                steps: test.stepResults.map((s) => ({ name: s.name, result: s.result, notes: s.notes })),
+              }
+            : {}),
         })),
       };
 
@@ -583,15 +626,83 @@ export default function RunsPage() {
                                   </div>
                                 </div>
                               )}
-                              {test.steps && (
+                              {test.stepResults && test.stepResults.length > 0 ? (
                                 <div>
-                                  <h4 className="text-sm font-semibold text-gray-700 mb-1">
-                                    🔢 Test Steps:
-                                  </h4>
-                                  <div className="text-sm text-gray-800 whitespace-pre-wrap bg-white p-3 rounded border">
-                                    {test.steps}
+                                  <div className="flex items-center justify-between mb-1">
+                                    <h4 className="text-sm font-semibold text-gray-700">🔢 Test Steps</h4>
+                                    <div className="flex gap-1">
+                                      <button
+                                        className="px-2 py-1 text-xs rounded border hover:bg-green-50"
+                                        onClick={() => markAllSteps(index, "pass")}
+                                        title="Mark all steps as Pass"
+                                      >
+                                        All Pass
+                                      </button>
+                                      <button
+                                        className="px-2 py-1 text-xs rounded border hover:bg-red-50"
+                                        onClick={() => markAllSteps(index, "fail")}
+                                        title="Mark all steps as Fail"
+                                      >
+                                        All Fail
+                                      </button>
+                                      <button
+                                        className="px-2 py-1 text-xs rounded border hover:bg-yellow-50"
+                                        onClick={() => markAllSteps(index, "skip")}
+                                        title="Mark all steps as Skip"
+                                      >
+                                        All Skip
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    {test.stepResults.map((s, si) => (
+                                      <div key={si} className="bg-white border rounded p-2">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className="text-sm text-gray-800 flex-1">{s.name}</div>
+                                          <div className="flex gap-1">
+                                            <button
+                                              onClick={() => updateStepResult(index, si, "pass")}
+                                              className={`px-2 py-0.5 rounded text-xs ${s.result === "pass" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-green-100"}`}
+                                              title="Mark step Pass"
+                                            >
+                                              Pass
+                                            </button>
+                                            <button
+                                              onClick={() => updateStepResult(index, si, "fail")}
+                                              className={`px-2 py-0.5 rounded text-xs ${s.result === "fail" ? "bg-red-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-red-100"}`}
+                                              title="Mark step Fail"
+                                            >
+                                              Fail
+                                            </button>
+                                            <button
+                                              onClick={() => updateStepResult(index, si, "skip")}
+                                              className={`px-2 py-0.5 rounded text-xs ${s.result === "skip" ? "bg-yellow-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-yellow-100"}`}
+                                              title="Mark step Skip"
+                                            >
+                                              Skip
+                                            </button>
+                                          </div>
+                                        </div>
+                                        <textarea
+                                          value={s.notes}
+                                          onChange={(e) => updateStepNotes(index, si, e.target.value)}
+                                          placeholder="Step-specific notes (optional)"
+                                          className="mt-2 w-full border rounded px-2 py-1 text-xs min-h-[40px] resize-y"
+                                          rows={2}
+                                        />
+                                      </div>
+                                    ))}
                                   </div>
                                 </div>
+                              ) : (
+                                test.steps ? (
+                                  <div>
+                                    <h4 className="text-sm font-semibold text-gray-700 mb-1">🔢 Test Steps</h4>
+                                    <div className="text-sm text-gray-800 whitespace-pre-wrap bg-white p-3 rounded border">
+                                      {test.steps}
+                                    </div>
+                                  </div>
+                                ) : null
                               )}
                               {test.expected && (
                                 <div>

@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
 
     // Process results sequentially to avoid branch SHA conflicts
     for (const testResult of results) {
-      const { path, storyId, result, notes } = testResult;
+      const { path, storyId, result, notes, steps } = testResult;
       
       if (!path || !result || !["pass", "fail"].includes(result)) {
         failedResults.push({
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
         const runFilename = `run-${ms}-${randomSuffix}.json`;
         const runPath = `${runDir}/${runFilename}`;
 
-        const payload = {
+        const payload: any = {
           path,
           storyId: storyId || null,
           result,
@@ -87,6 +87,16 @@ export async function POST(req: NextRequest) {
           executed_by: login,
           executed_at: timestamp,
         };
+        // Optional per-step outcomes
+        if (Array.isArray(steps)) {
+          try {
+            payload.steps = steps.map((s: any) => ({
+              name: String(s?.name || "").slice(0, 500),
+              result: s?.result === "pass" || s?.result === "fail" || s?.result === "skip" ? s.result : null,
+              notes: String(s?.notes || ""),
+            }));
+          } catch {}
+        }
 
         // Create the file with a single attempt (sequential processing avoids conflicts)
         const putRes = await fetch(

@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { path, storyId, result, notes } = await req.json();
+    const { path, storyId, result, notes, steps } = await req.json();
     if (!path || !result || !["pass", "fail"].includes(result)) {
       return new Response(
         JSON.stringify({ error: "path and result ('pass'|'fail') are required" }),
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const payload = {
+    const payload: any = {
       path,
       storyId: storyId || null,
       result,
@@ -106,6 +106,16 @@ export async function POST(req: NextRequest) {
       executed_by: login,
       executed_at: timestamp,
     };
+    // Optional per-step outcomes
+    if (Array.isArray(steps)) {
+      try {
+        payload.steps = steps.map((s: any) => ({
+          name: String(s?.name || "").slice(0, 500),
+          result: s?.result === "pass" || s?.result === "fail" || s?.result === "skip" ? s.result : null,
+          notes: String(s?.notes || ""),
+        }));
+      } catch {}
+    }
 
     // Helper function to create file with retry on branch SHA conflicts
     async function createFileWithRetry(maxAttempts = 3): Promise<Response> {
