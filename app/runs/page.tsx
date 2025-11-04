@@ -12,6 +12,7 @@ type SessionTest = {
   steps?: string;
   expected?: string;
   preconditions?: string;
+  data?: string;
   story_id?: string;
   result: "pass" | "fail" | "skip" | null;
   notes: string;
@@ -118,6 +119,7 @@ export default function RunsPage() {
       steps: tc.steps,
       expected: tc.expected,
       preconditions: tc.preconditions,
+      data: tc.data,
       story_id: tc.story_id,
       result: null,
       notes: "",
@@ -168,6 +170,16 @@ export default function RunsPage() {
     const steps = (updated[testIndex].stepResults || []).map((s) => ({ ...s, result: value }));
     updated[testIndex].stepResults = steps;
     setSessionTests(updated);
+  }
+
+  function copyToClipboard(text: string) {
+    try {
+      // @ts-ignore
+      if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+        // @ts-ignore
+        navigator.clipboard.writeText(text);
+      }
+    } catch {}
   }
 
   async function submitSession() {
@@ -624,6 +636,21 @@ export default function RunsPage() {
                                   <div className="text-sm text-gray-800 whitespace-pre-wrap bg-white p-3 rounded border">
                                     {test.preconditions}
                                   </div>
+                                </div>
+                              )}
+                              {test.data && (
+                                <div>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <h4 className="text-sm font-semibold text-gray-700">🧪 Test Data / SQL:</h4>
+                                    <button
+                                      onClick={() => copyToClipboard(test.data || "")}
+                                      className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title="Copy to clipboard"
+                                    >
+                                      Copy
+                                    </button>
+                                  </div>
+                                  <pre className="text-xs text-gray-800 bg-white p-3 rounded border whitespace-pre-wrap overflow-auto">{test.data}</pre>
                                 </div>
                               )}
                               {test.stepResults && test.stepResults.length > 0 ? (
