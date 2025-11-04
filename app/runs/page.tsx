@@ -30,6 +30,10 @@ type SessionTest = {
   showSetupSql?: boolean;
   showVerificationSql?: boolean;
   showTeardownSql?: boolean;
+  showDataHelp?: boolean;
+  showSetupHelp?: boolean;
+  showVerificationHelp?: boolean;
+  showTeardownHelp?: boolean;
   story_id?: string;
   result: "pass" | "fail" | "skip" | null;
   notes: string;
@@ -105,6 +109,17 @@ export default function RunsPage() {
     if (section === "setup") t.showSetupSql = !t.showSetupSql;
     if (section === "verification") t.showVerificationSql = !t.showVerificationSql;
     if (section === "teardown") t.showTeardownSql = !t.showTeardownSql;
+    setSessionTests(next);
+  }
+
+  function toggleHelpSection(index: number, section: "data" | "setup" | "verification" | "teardown") {
+    const next = [...sessionTests];
+    const t = next[index];
+    if (!t) return;
+    if (section === "data") t.showDataHelp = !t.showDataHelp;
+    if (section === "setup") t.showSetupHelp = !t.showSetupHelp;
+    if (section === "verification") t.showVerificationHelp = !t.showVerificationHelp;
+    if (section === "teardown") t.showTeardownHelp = !t.showTeardownHelp;
     setSessionTests(next);
   }
 
@@ -196,6 +211,10 @@ export default function RunsPage() {
       showSetupSql: true,
       showVerificationSql: true,
       showTeardownSql: true,
+      showDataHelp: false,
+      showSetupHelp: false,
+      showVerificationHelp: false,
+      showTeardownHelp: false,
     }));
 
     setSessionTests(tests);
@@ -782,6 +801,13 @@ export default function RunsPage() {
                                       Copy
                                     </button>
                                     <button
+                                      onClick={() => toggleHelpSection(index, "data")}
+                                      className="ml-2 text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title={test.showDataHelp ? "Hide help" : "Show help"}
+                                    >
+                                      Help
+                                    </button>
+                                    <button
                                       onClick={() => toggleSqlSection(index, "data")}
                                       className="ml-2 text-xs px-2 py-1 border rounded hover:bg-gray-50"
                                       title={test.showDataSql ? "Collapse" : "Expand"}
@@ -789,6 +815,12 @@ export default function RunsPage() {
                                       {test.showDataSql ? "Hide" : "Show"}
                                     </button>
                                   </div>
+                                  {test.showDataHelp && (
+                                    <div className="text-xs text-gray-700 bg-white p-3 rounded border mb-2">
+                                      Use <code>data:</code> for ad-hoc notes or SQL needed to execute the test. For multi-line, use YAML block style:
+                                      <pre className="mt-2 bg-gray-50 p-2 rounded border whitespace-pre-wrap">{`data: |\n  -- optional\n  SELECT * FROM my_table WHERE id = 1;`}</pre>
+                                    </div>
+                                  )}
                                   {test.showDataSql && (
                                     <pre className="text-xs text-gray-800 bg-white p-3 rounded border whitespace-pre-wrap overflow-auto">{test.data}</pre>
                                   )}
@@ -806,6 +838,13 @@ export default function RunsPage() {
                                       Copy
                                     </button>
                                     <button
+                                      onClick={() => toggleHelpSection(index, "setup")}
+                                      className="ml-2 text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title={test.showSetupHelp ? "Hide help" : "Show help"}
+                                    >
+                                      Help
+                                    </button>
+                                    <button
                                       onClick={() => toggleSqlSection(index, "setup")}
                                       className="ml-2 text-xs px-2 py-1 border rounded hover:bg-gray-50"
                                       title={test.showSetupSql ? "Collapse" : "Expand"}
@@ -813,6 +852,15 @@ export default function RunsPage() {
                                       {test.showSetupSql ? "Hide" : "Show"}
                                     </button>
                                   </div>
+                                  {test.showSetupHelp && (
+                                    <div className="text-xs text-gray-700 bg-white p-3 rounded border mb-2">
+                                      Provide pre-test SQL inline or via file.
+                                      <div className="mt-2">Inline:</div>
+                                      <pre className="mt-1 bg-gray-50 p-2 rounded border whitespace-pre-wrap">{`setup_sql: |\n  INSERT INTO users(id,email) VALUES (123,'test@example.com');`}</pre>
+                                      <div className="mt-2">Or file:</div>
+                                      <pre className="mt-1 bg-gray-50 p-2 rounded border whitespace-pre-wrap">{`setup_sql_file: qa/sql/setup_user.sql`}</pre>
+                                    </div>
+                                  )}
                                   {test.showSetupSql && (
                                     typeof test.loaded_setup_sql === "undefined" && !test.setup_sql && test.setup_sql_file ? (
                                       <div className="text-xs text-gray-600">Loading SQL from file...</div>
@@ -834,6 +882,13 @@ export default function RunsPage() {
                                       Copy
                                     </button>
                                     <button
+                                      onClick={() => toggleHelpSection(index, "verification")}
+                                      className="ml-2 text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title={test.showVerificationHelp ? "Hide help" : "Show help"}
+                                    >
+                                      Help
+                                    </button>
+                                    <button
                                       onClick={() => toggleSqlSection(index, "verification")}
                                       className="ml-2 text-xs px-2 py-1 border rounded hover:bg-gray-50"
                                       title={test.showVerificationSql ? "Collapse" : "Expand"}
@@ -841,6 +896,15 @@ export default function RunsPage() {
                                       {test.showVerificationSql ? "Hide" : "Show"}
                                     </button>
                                   </div>
+                                  {test.showVerificationHelp && (
+                                    <div className="text-xs text-gray-700 bg-white p-3 rounded border mb-2">
+                                      Provide SQL that verifies expected results.
+                                      <div className="mt-2">Inline:</div>
+                                      <pre className="mt-1 bg-gray-50 p-2 rounded border whitespace-pre-wrap">{`verification_sql: |\n  SELECT id,email FROM users WHERE id = 123;`}</pre>
+                                      <div className="mt-2">Or file:</div>
+                                      <pre className="mt-1 bg-gray-50 p-2 rounded border whitespace-pre-wrap">{`verification_sql_file: qa/sql/verify_user.sql`}</pre>
+                                    </div>
+                                  )}
                                   {test.showVerificationSql && (
                                     typeof test.loaded_verification_sql === "undefined" && !test.verification_sql && test.verification_sql_file ? (
                                       <div className="text-xs text-gray-600">Loading SQL from file...</div>
@@ -862,6 +926,13 @@ export default function RunsPage() {
                                       Copy
                                     </button>
                                     <button
+                                      onClick={() => toggleHelpSection(index, "teardown")}
+                                      className="ml-2 text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title={test.showTeardownHelp ? "Hide help" : "Show help"}
+                                    >
+                                      Help
+                                    </button>
+                                    <button
                                       onClick={() => toggleSqlSection(index, "teardown")}
                                       className="ml-2 text-xs px-2 py-1 border rounded hover:bg-gray-50"
                                       title={test.showTeardownSql ? "Collapse" : "Expand"}
@@ -869,6 +940,15 @@ export default function RunsPage() {
                                       {test.showTeardownSql ? "Hide" : "Show"}
                                     </button>
                                   </div>
+                                  {test.showTeardownHelp && (
+                                    <div className="text-xs text-gray-700 bg-white p-3 rounded border mb-2">
+                                      Provide cleanup SQL to restore data after the test.
+                                      <div className="mt-2">Inline:</div>
+                                      <pre className="mt-1 bg-gray-50 p-2 rounded border whitespace-pre-wrap">{`teardown_sql: |\n  DELETE FROM users WHERE id = 123;`}</pre>
+                                      <div className="mt-2">Or file:</div>
+                                      <pre className="mt-1 bg-gray-50 p-2 rounded border whitespace-pre-wrap">{`teardown_sql_file: qa/sql/teardown_user.sql`}</pre>
+                                    </div>
+                                  )}
                                   {test.showTeardownSql && (
                                     typeof test.loaded_teardown_sql === "undefined" && !test.teardown_sql && test.teardown_sql_file ? (
                                       <div className="text-xs text-gray-600">Loading SQL from file...</div>

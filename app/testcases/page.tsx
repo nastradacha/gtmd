@@ -529,6 +529,7 @@ export default function TestCasesPage() {
                   className="w-full border rounded px-3 py-2"
                   placeholder="e.g., Login with valid credentials"
                 />
+                <p className="text-xs text-gray-500 mt-1">Short, action-focused name. Used in file name/slug.</p>
               </div>
 
               <div>
@@ -540,6 +541,7 @@ export default function TestCasesPage() {
                   className="w-full border rounded px-3 py-2"
                   placeholder="manual/home-page or Regression"
                 />
+                <p className="text-xs text-gray-500 mt-1">Saved under qa-testcases/{formData.folder || "manual/General"}. Use paths under "manual/…" or "Regression".</p>
                 <div className="mt-1 flex flex-wrap gap-2 text-xs">
                   {[
                     "manual/home-page",
@@ -570,9 +572,7 @@ export default function TestCasesPage() {
                   className="w-full border rounded px-3 py-2"
                   placeholder="e.g., MS-005 or US-V-005 or 21"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Enter the story prefix (from title) or GitHub issue number
-                </p>
+                <p className="text-xs text-gray-500 mt-1">Enter story key or issue number. Accepted: MS-005, US-V-005, or 21.</p>
                 {storyPreview && (
                   <p className="text-xs text-green-600 mt-1 font-medium">✓ Story #{storyPreview.number} found</p>
                 )}
@@ -589,6 +589,7 @@ export default function TestCasesPage() {
                     {useAdvancedMode ? "Switch to Step Builder" : "Switch to Text Mode"}
                   </button>
                 </div>
+                <p className="text-xs text-gray-500 mb-2">Use the builder or paste numbered lines (1., 2., …). In Runs, each step can be marked Pass/Fail/Skip with notes.</p>
                 
                 {!useAdvancedMode ? (
                   <div className="space-y-2">
@@ -643,6 +644,7 @@ export default function TestCasesPage() {
 
               <div>
                 <label className="block text-sm font-medium mb-2">Expected Results *</label>
+                <p className="text-xs text-gray-500 -mt-1 mb-2">Bullet list of observable outcomes, one per line.</p>
                 {!useAdvancedMode ? (
                   <div className="space-y-2">
                     {expectedList.map((expected, index) => (
@@ -708,6 +710,7 @@ export default function TestCasesPage() {
                     <option value="P2">P2 - High</option>
                     <option value="P3">P3 - Medium</option>
                   </select>
+                  <p className="text-xs text-gray-500 mt-1">Use P1 for critical paths, P2 for high-impact, P3 for routine.</p>
                 </div>
 
                 <div>
@@ -719,6 +722,7 @@ export default function TestCasesPage() {
                     className="w-full border rounded px-3 py-2"
                     placeholder="e.g., Authentication"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Group related cases (e.g., Smoke, Regression, Authentication).</p>
                 </div>
               </div>
 
@@ -732,6 +736,7 @@ export default function TestCasesPage() {
                     className="w-full border rounded px-3 py-2"
                     placeholder="e.g., Login, Checkout"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Feature or area under test (used for filtering and reporting).</p>
                 </div>
 
                 <div>
@@ -743,11 +748,13 @@ export default function TestCasesPage() {
                     className="w-full border rounded px-3 py-2"
                     placeholder="e.g., dev, staging, prod"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Target environment for this test (optional).</p>
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium mb-2">Preconditions</label>
+                <p className="text-xs text-gray-500 -mt-1 mb-2">Bulleted prerequisites (e.g., seeded data, configs, accounts).</p>
                 {!useAdvancedMode ? (
                   <div className="space-y-2">
                     {preconditionsList.map((precondition, index) => (
@@ -805,6 +812,7 @@ export default function TestCasesPage() {
                   className="w-full border rounded px-3 py-2 h-20"
                   placeholder="Test data notes or references"
                 />
+                <p className="text-xs text-gray-500 mt-1">Optional. Add inline notes or SQL. In Runs, dedicated SQL sections appear when you add frontmatter keys like <code>setup_sql</code>, <code>verification_sql</code>, <code>teardown_sql</code> or file refs <code>setup_sql_file</code>, <code>verification_sql_file</code>, <code>teardown_sql_file</code>.</p>
               </div>
 
               <button
