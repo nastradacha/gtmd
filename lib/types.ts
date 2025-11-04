@@ -43,6 +43,14 @@ export interface TestCase {
   component?: string;          // Component under test
   preconditions?: string;      // Setup requirements
   data?: string;               // Test data notes
+  // Optional SQL inline content
+  setup_sql?: string;          // SQL to prepare data
+  verification_sql?: string;   // SQL to verify results
+  teardown_sql?: string;       // SQL to clean up
+  // Optional SQL file references (relative repo path)
+  setup_sql_file?: string;
+  verification_sql_file?: string;
+  teardown_sql_file?: string;
   steps?: string;              // Execution steps
   expected?: string;           // Expected results
   env?: string;                // Environment (dev, staging, prod)

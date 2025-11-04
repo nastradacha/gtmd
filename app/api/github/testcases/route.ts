@@ -153,6 +153,12 @@ export async function GET(req: Request) {
             if (meta.component) entry.component = meta.component;
             if (meta.preconditions) entry.preconditions = meta.preconditions;
             if (meta.data) entry.data = meta.data;
+            if (meta.setup_sql) entry.setup_sql = meta.setup_sql;
+            if (meta.verification_sql) entry.verification_sql = meta.verification_sql;
+            if (meta.teardown_sql) entry.teardown_sql = meta.teardown_sql;
+            if (meta.setup_sql_file) entry.setup_sql_file = meta.setup_sql_file;
+            if (meta.verification_sql_file) entry.verification_sql_file = meta.verification_sql_file;
+            if (meta.teardown_sql_file) entry.teardown_sql_file = meta.teardown_sql_file;
             if (meta.steps) entry.steps = meta.steps;
             if (meta.expected) entry.expected = meta.expected;
             if (meta.env) entry.env = meta.env;
@@ -216,6 +222,12 @@ export async function GET(req: Request) {
                   if (meta.component) entry.component = meta.component;
                   if (meta.preconditions) entry.preconditions = meta.preconditions;
                   if (meta.data) entry.data = meta.data;
+                  if (meta.setup_sql) entry.setup_sql = meta.setup_sql;
+                  if (meta.verification_sql) entry.verification_sql = meta.verification_sql;
+                  if (meta.teardown_sql) entry.teardown_sql = meta.teardown_sql;
+                  if (meta.setup_sql_file) entry.setup_sql_file = meta.setup_sql_file;
+                  if (meta.verification_sql_file) entry.verification_sql_file = meta.verification_sql_file;
+                  if (meta.teardown_sql_file) entry.teardown_sql_file = meta.teardown_sql_file;
                   if (meta.steps) entry.steps = meta.steps;
                   if (meta.expected) entry.expected = meta.expected;
                   if (meta.env) entry.env = meta.env;

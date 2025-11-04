@@ -13,6 +13,18 @@ type SessionTest = {
   expected?: string;
   preconditions?: string;
   data?: string;
+  // SQL inline content
+  setup_sql?: string;
+  verification_sql?: string;
+  teardown_sql?: string;
+  // SQL file references
+  setup_sql_file?: string;
+  verification_sql_file?: string;
+  teardown_sql_file?: string;
+  // Loaded file contents (resolved at expand time)
+  loaded_setup_sql?: string;
+  loaded_verification_sql?: string;
+  loaded_teardown_sql?: string;
   story_id?: string;
   result: "pass" | "fail" | "skip" | null;
   notes: string;
@@ -120,6 +132,12 @@ export default function RunsPage() {
       expected: tc.expected,
       preconditions: tc.preconditions,
       data: tc.data,
+      setup_sql: (tc as any).setup_sql,
+      verification_sql: (tc as any).verification_sql,
+      teardown_sql: (tc as any).teardown_sql,
+      setup_sql_file: (tc as any).setup_sql_file,
+      verification_sql_file: (tc as any).verification_sql_file,
+      teardown_sql_file: (tc as any).teardown_sql_file,
       story_id: tc.story_id,
       result: null,
       notes: "",
@@ -147,6 +165,10 @@ export default function RunsPage() {
     const updated = [...sessionTests];
     updated[index].expanded = !updated[index].expanded;
     setSessionTests(updated);
+    // If expanding, lazily load SQL file contents
+    if (updated[index].expanded) {
+      loadSqlFiles(index);
+    }
   }
 
   function updateStepResult(testIndex: number, stepIndex: number, value: "pass" | "fail" | "skip") {
@@ -180,6 +202,63 @@ export default function RunsPage() {
         navigator.clipboard.writeText(text);
       }
     } catch {}
+  }
+
+  async function fetchRepoFileText(path: string): Promise<string | null> {
+    try {
+      const res = await fetch(`/api/github/testcases?path=${encodeURIComponent(path)}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const b64 = String(data?.content || "").replace(/\n/g, "");
+      if (!b64) return null;
+      try {
+        // decode base64 to text
+        // atob may throw if invalid; guard
+        const decoded = atob(b64);
+        return decoded;
+      } catch {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  async function loadSqlFiles(index: number) {
+    const t = sessionTests[index];
+    if (!t) return;
+    const updates: Partial<SessionTest> = {};
+    const tasks: Promise<void>[] = [];
+    if (t.setup_sql_file && !t.setup_sql && typeof t.loaded_setup_sql === "undefined") {
+      tasks.push(
+        (async () => {
+          const txt = await fetchRepoFileText(t.setup_sql_file!);
+          updates.loaded_setup_sql = txt ?? "";
+        })()
+      );
+    }
+    if (t.verification_sql_file && !t.verification_sql && typeof t.loaded_verification_sql === "undefined") {
+      tasks.push(
+        (async () => {
+          const txt = await fetchRepoFileText(t.verification_sql_file!);
+          updates.loaded_verification_sql = txt ?? "";
+        })()
+      );
+    }
+    if (t.teardown_sql_file && !t.teardown_sql && typeof t.loaded_teardown_sql === "undefined") {
+      tasks.push(
+        (async () => {
+          const txt = await fetchRepoFileText(t.teardown_sql_file!);
+          updates.loaded_teardown_sql = txt ?? "";
+        })()
+      );
+    }
+    if (tasks.length) {
+      await Promise.all(tasks);
+      const next = [...sessionTests];
+      next[index] = { ...next[index], ...updates } as SessionTest;
+      setSessionTests(next);
+    }
   }
 
   async function submitSession() {
@@ -651,6 +730,63 @@ export default function RunsPage() {
                                     </button>
                                   </div>
                                   <pre className="text-xs text-gray-800 bg-white p-3 rounded border whitespace-pre-wrap overflow-auto">{test.data}</pre>
+                                </div>
+                              )}
+                              {(test.setup_sql || test.setup_sql_file) && (
+                                <div>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <h4 className="text-sm font-semibold text-gray-700">⚙️ Setup SQL{test.setup_sql_file ? ` (${test.setup_sql_file})` : ""}:</h4>
+                                    <button
+                                      onClick={() => copyToClipboard((test.setup_sql || test.loaded_setup_sql || ""))}
+                                      className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title="Copy to clipboard"
+                                    >
+                                      Copy
+                                    </button>
+                                  </div>
+                                  {typeof test.loaded_setup_sql === "undefined" && !test.setup_sql && test.setup_sql_file ? (
+                                    <div className="text-xs text-gray-600">Loading SQL from file...</div>
+                                  ) : (
+                                    <pre className="text-xs text-gray-800 bg-white p-3 rounded border whitespace-pre-wrap overflow-auto">{test.setup_sql || test.loaded_setup_sql}</pre>
+                                  )}
+                                </div>
+                              )}
+                              {(test.verification_sql || test.verification_sql_file) && (
+                                <div>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <h4 className="text-sm font-semibold text-gray-700">🔍 Verification SQL{test.verification_sql_file ? ` (${test.verification_sql_file})` : ""}:</h4>
+                                    <button
+                                      onClick={() => copyToClipboard((test.verification_sql || test.loaded_verification_sql || ""))}
+                                      className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title="Copy to clipboard"
+                                    >
+                                      Copy
+                                    </button>
+                                  </div>
+                                  {typeof test.loaded_verification_sql === "undefined" && !test.verification_sql && test.verification_sql_file ? (
+                                    <div className="text-xs text-gray-600">Loading SQL from file...</div>
+                                  ) : (
+                                    <pre className="text-xs text-gray-800 bg-white p-3 rounded border whitespace-pre-wrap overflow-auto">{test.verification_sql || test.loaded_verification_sql}</pre>
+                                  )}
+                                </div>
+                              )}
+                              {(test.teardown_sql || test.teardown_sql_file) && (
+                                <div>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <h4 className="text-sm font-semibold text-gray-700">🧹 Teardown SQL{test.teardown_sql_file ? ` (${test.teardown_sql_file})` : ""}:</h4>
+                                    <button
+                                      onClick={() => copyToClipboard((test.teardown_sql || test.loaded_teardown_sql || ""))}
+                                      className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title="Copy to clipboard"
+                                    >
+                                      Copy
+                                    </button>
+                                  </div>
+                                  {typeof test.loaded_teardown_sql === "undefined" && !test.teardown_sql && test.teardown_sql_file ? (
+                                    <div className="text-xs text-gray-600">Loading SQL from file...</div>
+                                  ) : (
+                                    <pre className="text-xs text-gray-800 bg-white p-3 rounded border whitespace-pre-wrap overflow-auto">{test.teardown_sql || test.loaded_teardown_sql}</pre>
+                                  )}
                                 </div>
                               )}
                               {test.stepResults && test.stepResults.length > 0 ? (
