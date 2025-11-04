@@ -55,6 +55,7 @@ export default function TestCasesPage() {
   const [expectedList, setExpectedList] = useState<string[]>([""]);  
   const [preconditionsList, setPreconditionsList] = useState<string[]>([""]);  
   const [useAdvancedMode, setUseAdvancedMode] = useState(false);
+  const [showDataHelp, setShowDataHelp] = useState(false);
 
   // Extract test case ID from filename
   const extractTestCaseId = (filename: string): string | null => {
@@ -805,7 +806,32 @@ export default function TestCasesPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Test Data</label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-medium mb-1">Test Data</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowDataHelp(!showDataHelp)}
+                    className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                  >
+                    {showDataHelp ? "Hide Help" : "Help"}
+                  </button>
+                </div>
+                {showDataHelp && (
+                  <div className="text-xs text-gray-600 bg-gray-50 border rounded p-2 mb-2">
+                    <div className="mb-1">Use for ad‑hoc notes or SQL needed to execute the test. For multi‑line, use YAML block style:</div>
+                    <pre className="bg-white border rounded p-2 overflow-auto"><code>data: |
+  -- optional
+  SELECT * FROM my_table WHERE id = 1;
+
+# For dedicated SQL sections in Runs, add:
+setup_sql: |
+  INSERT INTO my_table(id, name) VALUES (1,'Alice');
+verification_sql_file: qa/sql/verify_user.sql
+teardown_sql: |
+  DELETE FROM my_table WHERE id = 1;
+</code></pre>
+                  </div>
+                )}
                 <textarea
                   value={formData.data}
                   onChange={(e) => setFormData({ ...formData, data: e.target.value })}

@@ -110,7 +110,7 @@ title: ${quote(title)}
 story_id: ${quote(story_id || "")}
 priority: ${quote(priority || "P2")}
 suite: ${quote(suite || "General")}
-${component ? `component: ${quote(component)}\n` : ""}${preconditions ? `preconditions: ${formatYamlValue(preconditions)}\n` : ""}${data ? `data: ${quote(data)}\n` : ""}steps: ${formatYamlValue(steps)}
+${component ? `component: ${quote(component)}\n` : ""}${preconditions ? `preconditions: ${formatYamlValue(preconditions)}\n` : ""}${data ? `data: ${formatYamlValue(data)}\n` : ""}steps: ${formatYamlValue(steps)}
 expected: ${formatYamlValue(expected)}
 ${env ? `env: ${quote(env)}\n` : ""}status: "Draft"
 created: ${quote(new Date().toISOString())}
