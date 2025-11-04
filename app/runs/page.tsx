@@ -25,6 +25,11 @@ type SessionTest = {
   loaded_setup_sql?: string;
   loaded_verification_sql?: string;
   loaded_teardown_sql?: string;
+  // UI toggles
+  showDataSql?: boolean;
+  showSetupSql?: boolean;
+  showVerificationSql?: boolean;
+  showTeardownSql?: boolean;
   story_id?: string;
   result: "pass" | "fail" | "skip" | null;
   notes: string;
@@ -84,13 +89,57 @@ export default function RunsPage() {
   // Parse multi-line steps text into an array of step items
   function parseStepsText(text?: string) {
     if (!text) return [] as { name: string; result: "pass" | "fail" | "skip" | null; notes: string }[];
-    // Split by lines and strip any leading numbering like "1. ", "1) ", "1- "
     const lines = text
       .split(/\r?\n/)
-      .map((l) => l.trim())
+      .map((l: string) => l.trim())
       .filter(Boolean)
-      .map((l) => l.replace(/^\d+\s*[).:-]\s*/, ""));
-    return lines.map((name) => ({ name, result: null as any, notes: "" }));
+      .map((l: string) => l.replace(/^\d+\s*[).:-]\s*/, ""));
+    return lines.map((name: string) => ({ name, result: null as any, notes: "" }));
+  }
+
+  function toggleSqlSection(index: number, section: "data" | "setup" | "verification" | "teardown") {
+    const next = [...sessionTests];
+    const t = next[index];
+    if (!t) return;
+    if (section === "data") t.showDataSql = !t.showDataSql;
+    if (section === "setup") t.showSetupSql = !t.showSetupSql;
+    if (section === "verification") t.showVerificationSql = !t.showVerificationSql;
+    if (section === "teardown") t.showTeardownSql = !t.showTeardownSql;
+    setSessionTests(next);
+  }
+
+  function escapeHtml(s: string) {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function highlightSql(sql: string) {
+    let s = escapeHtml(sql);
+    // Block comments
+    s = s.replace(/\/\*[\s\S]*?\*\//g, (m) => `<span style="color:#6b7280;font-style:italic">${escapeHtml(m)}</span>`);
+    // Line comments
+    s = s.replace(/(^|\n)(\s*--.*?)(?=\n|$)/g, (m) => `<span style="color:#6b7280;font-style:italic">${escapeHtml(m)}</span>`);
+    // Strings
+    s = s.replace(/'(?:''|[^'])*'/g, (m) => `<span style="color:#16a34a">${m}</span>`);
+    // Numbers
+    s = s.replace(/\b\d+(?:\.\d+)?\b/g, (m) => `<span style="color:#0ea5e9">${m}</span>`);
+    // Keywords
+    const kw = /(SELECT|FROM|WHERE|AND|OR|INSERT|INTO|VALUES|UPDATE|SET|DELETE|JOIN|LEFT|RIGHT|INNER|OUTER|ON|CREATE|TABLE|PRIMARY|KEY|FOREIGN|NOT|NULL|AS|ORDER|BY|GROUP|HAVING|LIMIT|OFFSET|DISTINCT|CASE|WHEN|THEN|ELSE|END|UNION|ALL)\b/gi;
+    s = s.replace(kw, (m) => `<span style="color:#2563eb;font-weight:600">${m.toUpperCase()}</span>`);
+    return s;
+  }
+
+  function renderSqlBlock(text?: string) {
+    const content = text || "";
+    const html = highlightSql(content);
+    return (
+      <pre
+        className="text-xs text-gray-800 bg-white p-3 rounded border whitespace-pre-wrap overflow-auto"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    );
   }
 
   async function fetchTestCases() {
@@ -143,6 +192,10 @@ export default function RunsPage() {
       notes: "",
       expanded: false,
       stepResults: parseStepsText(tc.steps),
+      showDataSql: true,
+      showSetupSql: true,
+      showVerificationSql: true,
+      showTeardownSql: true,
     }));
 
     setSessionTests(tests);
@@ -728,8 +781,17 @@ export default function RunsPage() {
                                     >
                                       Copy
                                     </button>
+                                    <button
+                                      onClick={() => toggleSqlSection(index, "data")}
+                                      className="ml-2 text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title={test.showDataSql ? "Collapse" : "Expand"}
+                                    >
+                                      {test.showDataSql ? "Hide" : "Show"}
+                                    </button>
                                   </div>
-                                  <pre className="text-xs text-gray-800 bg-white p-3 rounded border whitespace-pre-wrap overflow-auto">{test.data}</pre>
+                                  {test.showDataSql && (
+                                    <pre className="text-xs text-gray-800 bg-white p-3 rounded border whitespace-pre-wrap overflow-auto">{test.data}</pre>
+                                  )}
                                 </div>
                               )}
                               {(test.setup_sql || test.setup_sql_file) && (
@@ -743,11 +805,20 @@ export default function RunsPage() {
                                     >
                                       Copy
                                     </button>
+                                    <button
+                                      onClick={() => toggleSqlSection(index, "setup")}
+                                      className="ml-2 text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title={test.showSetupSql ? "Collapse" : "Expand"}
+                                    >
+                                      {test.showSetupSql ? "Hide" : "Show"}
+                                    </button>
                                   </div>
-                                  {typeof test.loaded_setup_sql === "undefined" && !test.setup_sql && test.setup_sql_file ? (
-                                    <div className="text-xs text-gray-600">Loading SQL from file...</div>
-                                  ) : (
-                                    <pre className="text-xs text-gray-800 bg-white p-3 rounded border whitespace-pre-wrap overflow-auto">{test.setup_sql || test.loaded_setup_sql}</pre>
+                                  {test.showSetupSql && (
+                                    typeof test.loaded_setup_sql === "undefined" && !test.setup_sql && test.setup_sql_file ? (
+                                      <div className="text-xs text-gray-600">Loading SQL from file...</div>
+                                    ) : (
+                                      renderSqlBlock(test.setup_sql || test.loaded_setup_sql)
+                                    )
                                   )}
                                 </div>
                               )}
@@ -762,11 +833,20 @@ export default function RunsPage() {
                                     >
                                       Copy
                                     </button>
+                                    <button
+                                      onClick={() => toggleSqlSection(index, "verification")}
+                                      className="ml-2 text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title={test.showVerificationSql ? "Collapse" : "Expand"}
+                                    >
+                                      {test.showVerificationSql ? "Hide" : "Show"}
+                                    </button>
                                   </div>
-                                  {typeof test.loaded_verification_sql === "undefined" && !test.verification_sql && test.verification_sql_file ? (
-                                    <div className="text-xs text-gray-600">Loading SQL from file...</div>
-                                  ) : (
-                                    <pre className="text-xs text-gray-800 bg-white p-3 rounded border whitespace-pre-wrap overflow-auto">{test.verification_sql || test.loaded_verification_sql}</pre>
+                                  {test.showVerificationSql && (
+                                    typeof test.loaded_verification_sql === "undefined" && !test.verification_sql && test.verification_sql_file ? (
+                                      <div className="text-xs text-gray-600">Loading SQL from file...</div>
+                                    ) : (
+                                      renderSqlBlock(test.verification_sql || test.loaded_verification_sql)
+                                    )
                                   )}
                                 </div>
                               )}
@@ -781,11 +861,20 @@ export default function RunsPage() {
                                     >
                                       Copy
                                     </button>
+                                    <button
+                                      onClick={() => toggleSqlSection(index, "teardown")}
+                                      className="ml-2 text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title={test.showTeardownSql ? "Collapse" : "Expand"}
+                                    >
+                                      {test.showTeardownSql ? "Hide" : "Show"}
+                                    </button>
                                   </div>
-                                  {typeof test.loaded_teardown_sql === "undefined" && !test.teardown_sql && test.teardown_sql_file ? (
-                                    <div className="text-xs text-gray-600">Loading SQL from file...</div>
-                                  ) : (
-                                    <pre className="text-xs text-gray-800 bg-white p-3 rounded border whitespace-pre-wrap overflow-auto">{test.teardown_sql || test.loaded_teardown_sql}</pre>
+                                  {test.showTeardownSql && (
+                                    typeof test.loaded_teardown_sql === "undefined" && !test.teardown_sql && test.teardown_sql_file ? (
+                                      <div className="text-xs text-gray-600">Loading SQL from file...</div>
+                                    ) : (
+                                      renderSqlBlock(test.teardown_sql || test.loaded_teardown_sql)
+                                    )
                                   )}
                                 </div>
                               )}
