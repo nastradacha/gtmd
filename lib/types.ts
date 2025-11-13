@@ -79,6 +79,14 @@ export interface TestCaseFormData {
   data?: string;
   env?: string;
   folder?: string;
+  // Optional SQL inline content (advanced)
+  setup_sql?: string;
+  verification_sql?: string;
+  teardown_sql?: string;
+  // Optional SQL file references (advanced)
+  setup_sql_file?: string;
+  verification_sql_file?: string;
+  teardown_sql_file?: string;
 }
 
 export interface DefectFormData {

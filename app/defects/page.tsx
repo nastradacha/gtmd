@@ -5,8 +5,10 @@ import { GitHubIssue, DefectFormData } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import UserSelector from "@/components/UserSelector";
+import { useSearchParams } from "next/navigation";
 
 export default function DefectsPage() {
+  const searchParams = useSearchParams();
   const [defects, setDefects] = useState<GitHubIssue[]>([]);
   const [filteredDefects, setFilteredDefects] = useState<GitHubIssue[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,6 +49,38 @@ export default function DefectsPage() {
     storyId: "",
     testCaseId: "",
   });
+
+  // Prefill form from query parameters (if present)
+  useEffect(() => {
+    try {
+      const spTitle = searchParams.get("title");
+      const spDesc = searchParams.get("description");
+      const spSeverity = searchParams.get("severity");
+      const spPriority = searchParams.get("priority");
+      const spStoryId = searchParams.get("story_id") || searchParams.get("storyId");
+      const spTestCase = searchParams.get("test_case") || searchParams.get("testCaseId") || searchParams.get("test_case_id");
+
+      if (spTitle || spDesc || spSeverity || spPriority || spStoryId || spTestCase) {
+        setShowForm(true);
+        setFormData((prev) => ({
+          ...prev,
+          title: spTitle ?? prev.title,
+          description: spDesc ?? prev.description,
+          severity: (["Critical", "High", "Medium", "Low"].includes(spSeverity || "")
+            ? (spSeverity as any)
+            : prev.severity),
+          priority: (["P1", "P2", "P3"].includes(spPriority || "")
+            ? (spPriority as any)
+            : prev.priority),
+          storyId: spStoryId ?? prev.storyId,
+          testCaseId: spTestCase ?? prev.testCaseId,
+        }));
+        if (spStoryId) {
+          setStorySearch(spStoryId);
+        }
+      }
+    } catch {}
+  }, [searchParams]);
 
   useEffect(() => {
     fetchDefects();

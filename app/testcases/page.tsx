@@ -56,6 +56,9 @@ export default function TestCasesPage() {
   const [preconditionsList, setPreconditionsList] = useState<string[]>([""]);  
   const [useAdvancedMode, setUseAdvancedMode] = useState(false);
   const [showDataHelp, setShowDataHelp] = useState(false);
+  const [showStepsHelp, setShowStepsHelp] = useState(false);
+  const [showPreconditionsHelp, setShowPreconditionsHelp] = useState(false);
+  const [showAdvancedSql, setShowAdvancedSql] = useState(false);
 
   // Extract test case ID from filename
   const extractTestCaseId = (filename: string): string | null => {
@@ -533,6 +536,78 @@ export default function TestCasesPage() {
                 <p className="text-xs text-gray-500 mt-1">Short, action-focused name. Used in file name/slug.</p>
               </div>
 
+              {/* Advanced SQL (optional) */}
+              <div className="mt-4">
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-medium mb-1">Advanced SQL (optional)</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvancedSql(!showAdvancedSql)}
+                    className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                  >
+                    {showAdvancedSql ? "Hide" : "Show"}
+                  </button>
+                </div>
+                {showAdvancedSql && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Setup SQL (inline)</label>
+                      <textarea
+                        value={formData.setup_sql || ""}
+                        onChange={(e) => setFormData({ ...formData, setup_sql: e.target.value })}
+                        className="w-full border rounded px-2 py-1 h-28 text-xs"
+                        placeholder="INSERT/UPDATE seed data"
+                      />
+                      <label className="block text-xs font-medium mt-2 mb-1">Setup SQL file (optional)</label>
+                      <input
+                        type="text"
+                        value={formData.setup_sql_file || ""}
+                        onChange={(e) => setFormData({ ...formData, setup_sql_file: e.target.value })}
+                        className="w-full border rounded px-2 py-1 text-xs"
+                        placeholder="qa/sql/setup.sql"
+                      />
+                      <p className="text-[11px] text-gray-500 mt-1">If both are provided, inline takes precedence in Runs.</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Verification SQL (inline)</label>
+                      <textarea
+                        value={formData.verification_sql || ""}
+                        onChange={(e) => setFormData({ ...formData, verification_sql: e.target.value })}
+                        className="w-full border rounded px-2 py-1 h-28 text-xs"
+                        placeholder="SELECT ... to verify expected state"
+                      />
+                      <label className="block text-xs font-medium mt-2 mb-1">Verification SQL file (optional)</label>
+                      <input
+                        type="text"
+                        value={formData.verification_sql_file || ""}
+                        onChange={(e) => setFormData({ ...formData, verification_sql_file: e.target.value })}
+                        className="w-full border rounded px-2 py-1 text-xs"
+                        placeholder="qa/sql/verify.sql"
+                      />
+                      <p className="text-[11px] text-gray-500 mt-1">If both are provided, inline takes precedence in Runs.</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Teardown SQL (inline)</label>
+                      <textarea
+                        value={formData.teardown_sql || ""}
+                        onChange={(e) => setFormData({ ...formData, teardown_sql: e.target.value })}
+                        className="w-full border rounded px-2 py-1 h-28 text-xs"
+                        placeholder="DELETE cleanup statements"
+                      />
+                      <label className="block text-xs font-medium mt-2 mb-1">Teardown SQL file (optional)</label>
+                      <input
+                        type="text"
+                        value={formData.teardown_sql_file || ""}
+                        onChange={(e) => setFormData({ ...formData, teardown_sql_file: e.target.value })}
+                        className="w-full border rounded px-2 py-1 text-xs"
+                        placeholder="qa/sql/teardown.sql"
+                      />
+                      <p className="text-[11px] text-gray-500 mt-1">If both are provided, inline takes precedence in Runs.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1">Folder</label>
                 <input
@@ -582,14 +657,33 @@ export default function TestCasesPage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium">Test Steps *</label>
-                  <button
-                    type="button"
-                    onClick={() => setUseAdvancedMode(!useAdvancedMode)}
-                    className="text-xs text-blue-600 hover:underline"
-                  >
-                    {useAdvancedMode ? "Switch to Step Builder" : "Switch to Text Mode"}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowStepsHelp(!showStepsHelp)}
+                      className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                    >
+                      {showStepsHelp ? "Hide Help" : "Help"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUseAdvancedMode(!useAdvancedMode)}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      {useAdvancedMode ? "Switch to Step Builder" : "Switch to Text Mode"}
+                    </button>
+                  </div>
                 </div>
+                {showStepsHelp && (
+                  <div className="text-xs text-gray-600 bg-gray-50 border rounded p-2 mb-2">
+                    <div className="mb-1">Paste numbered lines or use the builder. Example:</div>
+                    <pre className="bg-white border rounded p-2 overflow-auto"><code>1. Navigate to login page
+2. Enter username
+3. Enter password
+4. Click Login
+</code></pre>
+                  </div>
+                )}
                 <p className="text-xs text-gray-500 mb-2">Use the builder or paste numbered lines (1., 2., …). In Runs, each step can be marked Pass/Fail/Skip with notes.</p>
                 
                 {!useAdvancedMode ? (
@@ -754,7 +848,25 @@ export default function TestCasesPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Preconditions</label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-medium mb-2">Preconditions</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowPreconditionsHelp(!showPreconditionsHelp)}
+                    className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                  >
+                    {showPreconditionsHelp ? "Hide Help" : "Help"}
+                  </button>
+                </div>
+                {showPreconditionsHelp && (
+                  <div className="text-xs text-gray-600 bg-gray-50 border rounded p-2 mb-2">
+                    <div className="mb-1">Bullet list of prerequisites. Example:</div>
+                    <pre className="bg-white border rounded p-2 overflow-auto"><code>- Seed user exists: alice@example.com
+- Feature flag "beta" enabled
+- Test account has balance ≥ 0
+</code></pre>
+                  </div>
+                )}
                 <p className="text-xs text-gray-500 -mt-1 mb-2">Bulleted prerequisites (e.g., seeded data, configs, accounts).</p>
                 {!useAdvancedMode ? (
                   <div className="space-y-2">
@@ -1280,12 +1392,7 @@ teardown_sql: |
                           const testPath = selectedFile || "";
                           const failNotes = latestRun.notes || notes || "";
                           const title = `[BUG] ${selectedTestCase?.title || selectedTestCase?.name || "Test failure"}`;
-                          const body = `---
-story_id: "${storyId}"
-test_case: "${testPath}"
----
-
-## Bug Description
+                          const description = `## Bug Description
 Test case failed during execution.
 
 ## Test Case
@@ -1295,7 +1402,7 @@ ${testPath}
 See test case: ${testPath}
 
 ## Expected Behavior
-Test should pass.
+${selectedTestCase?.expected || "Test should pass."}
 
 ## Actual Behavior
 Test failed with notes: ${failNotes}
@@ -1307,13 +1414,13 @@ Test failed with notes: ${failNotes}
 `;
                           const params = new URLSearchParams({
                             title,
-                            body,
-                            labels: "bug,defect,test-failure",
+                            description,
+                            severity: "Medium",
+                            priority: "P2",
                           });
-                          const repoUrl = storiesRepo.includes("github.com") 
-                            ? storiesRepo.replace(/\.git$/, "")
-                            : `https://github.com/${storiesRepo}`;
-                          window.open(`${repoUrl}/issues/new?${params.toString()}`, "_blank");
+                          if (storyId) params.set("story_id", storyId);
+                          if (testPath) params.set("test_case", testPath);
+                          window.open(`https://gtmd.vercel.app/defects?${params.toString()}`, "_blank");
                         }}
                         className="w-full px-3 py-2 rounded bg-orange-600 text-white text-sm hover:bg-orange-700 flex items-center justify-center gap-2"
                         title="Create a defect issue from this failure"

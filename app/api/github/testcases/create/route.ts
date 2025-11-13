@@ -15,7 +15,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { title, story_id, steps, expected, priority, suite, folder, component, preconditions, data, env } = body;
+    const { title, story_id, steps, expected, priority, suite, folder, component, preconditions, data, env,
+      setup_sql, verification_sql, teardown_sql, setup_sql_file, verification_sql_file, teardown_sql_file } = body;
 
     if (!title || !steps || !expected) {
       return new Response(
@@ -110,7 +111,7 @@ title: ${quote(title)}
 story_id: ${quote(story_id || "")}
 priority: ${quote(priority || "P2")}
 suite: ${quote(suite || "General")}
-${component ? `component: ${quote(component)}\n` : ""}${preconditions ? `preconditions: ${formatYamlValue(preconditions)}\n` : ""}${data ? `data: ${formatYamlValue(data)}\n` : ""}steps: ${formatYamlValue(steps)}
+${component ? `component: ${quote(component)}\n` : ""}${preconditions ? `preconditions: ${formatYamlValue(preconditions)}\n` : ""}${data ? `data: ${formatYamlValue(data)}\n` : ""}${setup_sql ? `setup_sql: ${formatYamlValue(setup_sql)}\n` : ""}${verification_sql ? `verification_sql: ${formatYamlValue(verification_sql)}\n` : ""}${teardown_sql ? `teardown_sql: ${formatYamlValue(teardown_sql)}\n` : ""}${setup_sql_file ? `setup_sql_file: ${quote(setup_sql_file)}\n` : ""}${verification_sql_file ? `verification_sql_file: ${quote(verification_sql_file)}\n` : ""}${teardown_sql_file ? `teardown_sql_file: ${quote(teardown_sql_file)}\n` : ""}steps: ${formatYamlValue(steps)}
 expected: ${formatYamlValue(expected)}
 ${env ? `env: ${quote(env)}\n` : ""}status: "Draft"
 created: ${quote(new Date().toISOString())}
