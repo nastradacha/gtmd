@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextRequest } from "next/server";
+import { getRepoEnv } from "@/lib/projects";
 
 function injectUpdateFrontmatter(content: string, login: string) {
   const now = new Date().toISOString();
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
   }
 
-  const repoEnv = process.env.TESTCASES_REPO;
+  const repoEnv = getRepoEnv(req, "testcases");
   if (!repoEnv) {
     return new Response(JSON.stringify({ error: "TESTCASES_REPO not configured" }), { status: 500 });
   }

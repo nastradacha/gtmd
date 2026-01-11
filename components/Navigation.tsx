@@ -7,6 +7,9 @@ import { useEffect, useState } from "react";
 export default function Navigation() {
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
+  const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [projectLoading, setProjectLoading] = useState(false);
 
   useEffect(() => {
     // Fetch user info to show in nav
@@ -15,6 +18,38 @@ export default function Navigation() {
       .then(setUser)
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    setProjectLoading(true);
+    fetch("/api/projects")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setProjects(Array.isArray(data.projects) ? data.projects : []);
+        setSelectedProjectId(String(data.selectedProjectId || data.activeProject?.id || ""));
+      })
+      .catch(() => {})
+      .finally(() => setProjectLoading(false));
+  }, [user]);
+
+  async function changeProject(projectId: string) {
+    setSelectedProjectId(projectId);
+    try {
+      setProjectLoading(true);
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId }),
+      });
+      if (res.ok) {
+        window.location.reload();
+      }
+    } catch {
+    } finally {
+      setProjectLoading(false);
+    }
+  }
 
   const navItems = [
     { href: "/dashboard", label: "Dashboard" },
@@ -58,6 +93,24 @@ export default function Navigation() {
           <div className="flex items-center gap-4">
             {user && (
               <>
+                {projects.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">Project</span>
+                    <select
+                      value={selectedProjectId}
+                      onChange={(e) => changeProject(e.target.value)}
+                      disabled={projectLoading}
+                      className="border rounded px-2 py-1 text-sm bg-white"
+                      title="Select project"
+                    >
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <Link
                   href="/admin/config"
                   className="text-gray-600 hover:text-gray-900"

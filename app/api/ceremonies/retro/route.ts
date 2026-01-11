@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextRequest } from "next/server";
+import { getRepoEnv } from "@/lib/projects";
 
 function parseRepo(env?: string) {
   if (!env) return null as any;
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest) {
   if (!session?.accessToken) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
   }
-  const repoEnv = process.env.TESTCASES_REPO;
+  const repoEnv = getRepoEnv(req, "testcases");
   const repo = parseRepo(repoEnv);
   if (!repo?.owner || !repo?.name) {
     return new Response(JSON.stringify({ error: "TESTCASES_REPO not configured" }), { status: 500 });
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest) {
   if (!session?.accessToken) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
   }
-  const repoEnv = process.env.TESTCASES_REPO;
+  const repoEnv = getRepoEnv(req, "testcases");
   const repo = parseRepo(repoEnv);
   if (!repo?.owner || !repo?.name) {
     return new Response(JSON.stringify({ error: "TESTCASES_REPO not configured" }), { status: 500 });

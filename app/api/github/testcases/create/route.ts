@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextRequest } from "next/server";
+import { getRepoEnv } from "@/lib/projects";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -8,7 +9,7 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
   }
 
-  const repo = process.env.TESTCASES_REPO;
+  const repo = getRepoEnv(req, "testcases");
   if (!repo) {
     return new Response(JSON.stringify({ error: "TESTCASES_REPO not configured" }), { status: 500 });
   }

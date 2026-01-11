@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
+import { getRepoEnv } from "@/lib/projects";
 
 export const runtime = "nodejs";
 
-export async function GET() {
-  const repoEnv = process.env.STORIES_REPO || "";
+export async function GET(req: Request) {
+  const repoEnv = getRepoEnv(req, "stories") || "";
 
   let storiesRepo = ""; // owner/name
   let storiesRepoUrl = ""; // https://github.com/owner/name

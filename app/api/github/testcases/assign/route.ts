@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { getRepoEnv } from "@/lib/projects";
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -12,7 +13,7 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: "Missing path" }), { status: 400 });
   }
 
-  const repoEnv = process.env.TESTCASES_REPO;
+  const repoEnv = getRepoEnv(req, "testcases");
   if (!repoEnv) {
     return new Response(JSON.stringify({ error: "TESTCASES_REPO not configured" }), { status: 500 });
   }

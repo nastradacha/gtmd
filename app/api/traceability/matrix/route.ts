@@ -1,8 +1,9 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { getRepoEnv } from "@/lib/projects";
 
 // Simple in-memory cache for the matrix payload
-let matrixCache: { data: any; ts: number } | null = null;
+let matrixCache: Map<string, { data: any; ts: number }> = new Map();
 const MATRIX_CACHE_TTL_MS = 60_000; // 60 seconds
 
 function parseRepoEnv(repoEnv: string) {
@@ -64,17 +65,20 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const nocache = /^(1|true)$/i.test(searchParams.get("nocache") || "");
-  if (!nocache && matrixCache && Date.now() - matrixCache.ts < MATRIX_CACHE_TTL_MS) {
-    return new Response(
-      JSON.stringify(matrixCache.data, null, 2),
-      { status: 200, headers: { "Content-Type": "application/json", "X-Cache": "HIT" } }
-    );
-  }
 
-  const STORIES_REPO = process.env.STORIES_REPO;
-  const TESTCASES_REPO = process.env.TESTCASES_REPO;
+  const STORIES_REPO = getRepoEnv(req, "stories");
+  const TESTCASES_REPO = getRepoEnv(req, "testcases");
   if (!STORIES_REPO || !TESTCASES_REPO) {
     return new Response(JSON.stringify({ error: "Missing STORIES_REPO or TESTCASES_REPO" }), { status: 500 });
+  }
+
+  const cacheKey = `${STORIES_REPO}::${TESTCASES_REPO}`;
+  const cached = matrixCache.get(cacheKey);
+  if (!nocache && cached && Date.now() - cached.ts < MATRIX_CACHE_TTL_MS) {
+    return new Response(
+      JSON.stringify(cached.data, null, 2),
+      { status: 200, headers: { "Content-Type": "application/json", "X-Cache": "HIT" } }
+    );
   }
 
   let storiesOwner: string, storiesName: string;
@@ -440,7 +444,7 @@ export async function GET(req: Request) {
     }
 
     const payload = { stories: storiesOut, gaps };
-    matrixCache = { data: payload, ts: Date.now() };
+    matrixCache.set(cacheKey, { data: payload, ts: Date.now() });
     return new Response(
       JSON.stringify(payload, null, 2),
       { status: 200, headers: { "Content-Type": "application/json", "X-Cache": "MISS" } }

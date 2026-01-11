@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import yaml from "js-yaml";
+import { getRepoEnv } from "@/lib/projects";
 
 function parseFrontmatter(content: string, filePath?: string): Record<string, any> {
   const fmMatch = content.match(/^---\s*\r?\n([\s\S]+?)\r?\n---/);
@@ -25,7 +26,7 @@ export async function GET(req: Request) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
   }
 
-  const repoEnv = process.env.TESTCASES_REPO;
+  const repoEnv = getRepoEnv(req, "testcases");
   if (!repoEnv) {
     return new Response(JSON.stringify({ error: "TESTCASES_REPO not configured" }), { status: 500 });
   }

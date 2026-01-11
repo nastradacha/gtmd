@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextRequest } from "next/server";
+import { getRepoEnv } from "@/lib/projects";
 
 export const runtime = "nodejs";
 
@@ -14,7 +15,7 @@ export async function DELETE(req: NextRequest) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
   }
 
-  const repoEnv = process.env.STORIES_REPO;
+  const repoEnv = getRepoEnv(req, "stories");
   if (!repoEnv) {
     return new Response(JSON.stringify({ error: "STORIES_REPO not configured" }), { status: 500 });
   }

@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextRequest } from "next/server";
+import { getRepoEnv } from "@/lib/projects";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -8,7 +9,9 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
   }
 
-  const repoEnv = process.env.TESTCASES_REPO;
+  const accessToken = session.accessToken;
+
+  const repoEnv = getRepoEnv(req, "testcases");
   if (!repoEnv) {
     return new Response(JSON.stringify({ error: "TESTCASES_REPO not configured" }), { status: 500 });
   }
@@ -41,7 +44,7 @@ export async function POST(req: NextRequest) {
     // Get user login for audit
     const meRes = await fetch("https://api.github.com/user", {
       headers: {
-        Authorization: `Bearer ${session.accessToken}`,
+        Authorization: `Bearer ${accessToken}`,
         Accept: "application/vnd.github+json",
       },
     });
@@ -131,7 +134,7 @@ export async function POST(req: NextRequest) {
           {
             method: "PUT",
             headers: {
-              Authorization: `Bearer ${session.accessToken}`,
+              Authorization: `Bearer ${accessToken}`,
               Accept: "application/vnd.github+json",
               "Content-Type": "application/json",
             },
@@ -177,7 +180,7 @@ export async function POST(req: NextRequest) {
         `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(runPath)}`,
         {
           headers: {
-            Authorization: `Bearer ${session.accessToken}`,
+            Authorization: `Bearer ${accessToken}`,
             Accept: "application/vnd.github+json",
           },
         }
@@ -209,7 +212,7 @@ export async function POST(req: NextRequest) {
           {
             method: "PUT",
             headers: {
-              Authorization: `Bearer ${session.accessToken}`,
+              Authorization: `Bearer ${accessToken}`,
               Accept: "application/vnd.github+json",
               "Content-Type": "application/json",
             },

@@ -23,7 +23,7 @@ export default function StoriesPage() {
   const [currentUser, setCurrentUser] = useState<string | null>(null);
 
   // Filters
-  const [stateFilter, setStateFilter] = useState<"all" | "open" | "closed">("open");
+  const [stateFilter, setStateFilter] = useState<"all" | "open" | "closed">("all");
   const [labelFilter, setLabelFilter] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
 

@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextRequest } from "next/server";
+import { getRepoEnv } from "@/lib/projects";
 
 function parseRepo(repoEnv?: string): { owner: string; name: string } | null {
   if (!repoEnv) return null;
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
   }
 
-  const repoParsed = parseRepo(process.env.STORIES_REPO);
+  const repoParsed = parseRepo(getRepoEnv(req, "stories"));
   if (!repoParsed) {
     return new Response(JSON.stringify({ error: "STORIES_REPO not configured" }), { status: 500 });
   }

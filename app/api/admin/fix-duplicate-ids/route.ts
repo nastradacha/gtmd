@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextRequest } from "next/server";
+import { getRepoEnv } from "@/lib/projects";
 
 /**
  * GET/POST /api/admin/fix-duplicate-ids
@@ -17,7 +18,7 @@ async function fixDuplicates(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const dryRun = searchParams.get("dryRun") === "true";
 
-  const repo = process.env.TESTCASES_REPO;
+  const repo = getRepoEnv(req, "testcases");
   if (!repo) {
     return new Response(JSON.stringify({ error: "TESTCASES_REPO not configured" }), { status: 500 });
   }

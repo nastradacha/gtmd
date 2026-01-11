@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { getRepoEnv } from "@/lib/projects";
 
 /**
  * POST /api/github/testcases/result/batch
@@ -13,7 +14,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Use the same repo parsing as single-result endpoint
-  const repoEnv = process.env.TESTCASES_REPO;
+  const repoEnv = getRepoEnv(req, "testcases");
   if (!repoEnv) {
     return new Response(JSON.stringify({ error: "TESTCASES_REPO not configured" }), { status: 500 });
   }

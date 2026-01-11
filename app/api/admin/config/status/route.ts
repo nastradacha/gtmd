@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getRepoEnv } from "@/lib/projects";
 
 interface ConfigCheck {
   key: string;
@@ -60,8 +61,19 @@ export async function GET(req: NextRequest) {
     description: "GitHub OAuth App Client Secret from GitHub Developer Settings",
   });
 
-  // Check STORIES_REPO
-  const storiesRepo = process.env.STORIES_REPO;
+  const projectsRaw = process.env.GTMD_PROJECTS;
+  const hasProjects = !!(projectsRaw && projectsRaw.trim());
+  configs.push({
+    key: "GTMD_PROJECTS",
+    required: false,
+    configured: !hasProjects ? false : true,
+    value: hasProjects ? "(set)" : undefined,
+    error: hasProjects ? undefined : undefined,
+    description: "Optional JSON list of projects (enables multi-project repo selection)",
+  });
+
+  const storiesRepo = getRepoEnv(req, "stories");
+  const testcasesRepo = getRepoEnv(req, "testcases");
   const storiesRepoValid = storiesRepo && /^[\w-]+\/[\w-]+$/.test(storiesRepo);
   configs.push({
     key: "STORIES_REPO",
@@ -77,7 +89,6 @@ export async function GET(req: NextRequest) {
   });
 
   // Check TESTCASES_REPO
-  const testcasesRepo = process.env.TESTCASES_REPO;
   const testcasesRepoValid = testcasesRepo && /^[\w-]+\/[\w-]+$/.test(testcasesRepo);
   configs.push({
     key: "TESTCASES_REPO",

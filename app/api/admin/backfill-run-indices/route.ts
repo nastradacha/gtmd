@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
+import { getRepoEnv } from "@/lib/projects";
 
 /**
  * Backfill latest.json indices for existing test runs
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const dryRun = searchParams.get("dryRun") === "true";
 
-  const repoEnv = process.env.TESTCASES_REPO;
+  const repoEnv = getRepoEnv(req, "testcases");
   if (!repoEnv) {
     return NextResponse.json({ error: "TESTCASES_REPO not configured" }, { status: 500 });
   }

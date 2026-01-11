@@ -37,44 +37,37 @@ export default function DashboardPage() {
     setError(null);
 
     try {
-      // Fetch stories
-      const storiesRes = await fetch("/api/github/issues?state=all");
-      if (!storiesRes.ok) throw new Error("Failed to fetch stories");
-      const stories: GitHubIssue[] = await storiesRes.json();
-      const storiesOnly = stories.filter((item: any) => !item.pull_request);
+      const [issuesRes, testCasesRes] = await Promise.all([
+        fetch("/api/github/issues?state=all"),
+        fetch("/api/github/testcases"),
+      ]);
 
-      // Fetch test cases
-      const testCasesRes = await fetch("/api/github/testcases");
+      if (!issuesRes.ok) throw new Error("Failed to fetch stories");
       if (!testCasesRes.ok) throw new Error("Failed to fetch test cases");
+
+      const allIssues: GitHubIssue[] = await issuesRes.json();
+      const issuesOnly = allIssues.filter((item: any) => !item.pull_request);
+
+      const defects = issuesOnly.filter((d) =>
+        d.labels.some((l) => l.name.toLowerCase() === "bug")
+      );
+      const storiesOnly = issuesOnly.filter(
+        (d) => !d.labels.some((l) => l.name.toLowerCase() === "bug")
+      );
+
       const testCases: TestCase[] = await testCasesRes.json();
 
-      // Fetch test case contents to find linked stories
+      // Find linked stories using story_id frontmatter already returned by the testcases endpoint
       const linkedStoryIds = new Set<number>();
       for (const tc of testCases) {
-        try {
-          const contentRes = await fetch(
-            `/api/github/testcases?path=${encodeURIComponent(tc.path)}`
-          );
-          if (contentRes.ok) {
-            const data = await contentRes.json();
-            const content = atob(data.content);
-            // Extract story ID from frontmatter or body
-            const storyMatch = content.match(/story[_-]?id:\s*#?(\d+)/i);
-            if (storyMatch) {
-              linkedStoryIds.add(parseInt(storyMatch[1]));
-            }
-          }
-        } catch {
-          // Skip if can't fetch content
-        }
+        const raw = (tc as any).story_id;
+        if (!raw) continue;
+        const m = String(raw).match(/\d+/);
+        if (m) linkedStoryIds.add(parseInt(m[0], 10));
       }
 
-      const linkedStories = storiesOnly.filter((story) =>
-        linkedStoryIds.has(story.number)
-      );
-      const unlinkedStories = storiesOnly.filter(
-        (story) => !linkedStoryIds.has(story.number)
-      );
+      const linkedStories = storiesOnly.filter((story) => linkedStoryIds.has(story.number));
+      const unlinkedStories = storiesOnly.filter((story) => !linkedStoryIds.has(story.number));
 
       setCoverage({
         totalStories: storiesOnly.length,
@@ -85,11 +78,6 @@ export default function DashboardPage() {
             : 0,
         unlinkedStories,
       });
-
-      // Fetch defects (issues with bug label)
-      const defectsRes = await fetch("/api/github/issues?state=all&labels=bug");
-      if (!defectsRes.ok) throw new Error("Failed to fetch defects");
-      const defects: GitHubIssue[] = await defectsRes.json();
 
       const openDefects = defects.filter((d) => d.state === "open");
       const closedDefects = defects.filter((d) => d.state === "closed");

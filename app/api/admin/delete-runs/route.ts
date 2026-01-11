@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { getRepoEnv } from "@/lib/projects";
 
 function parseRepoEnv(repoEnv: string) {
   let owner: string | undefined;
@@ -24,7 +25,7 @@ export async function GET(req: Request) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
   }
 
-  const TESTCASES_REPO = process.env.TESTCASES_REPO;
+  const TESTCASES_REPO = getRepoEnv(req, "testcases");
   if (!TESTCASES_REPO) {
     return new Response(JSON.stringify({ error: "Missing TESTCASES_REPO" }), { status: 500 });
   }
@@ -129,7 +130,7 @@ export async function DELETE(req: Request) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
   }
 
-  const TESTCASES_REPO = process.env.TESTCASES_REPO;
+  const TESTCASES_REPO = getRepoEnv(req, "testcases");
   if (!TESTCASES_REPO) {
     return new Response(JSON.stringify({ error: "Missing TESTCASES_REPO" }), { status: 500 });
   }
