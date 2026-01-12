@@ -45,8 +45,11 @@ export default function DashboardPage() {
       if (!issuesRes.ok) throw new Error("Failed to fetch stories");
       if (!testCasesRes.ok) throw new Error("Failed to fetch test cases");
 
-      const allIssues: GitHubIssue[] = await issuesRes.json();
-      const issuesOnly = allIssues.filter((item: any) => !item.pull_request);
+      const allIssues = (await issuesRes.json()) as unknown;
+      const issuesOnly = (Array.isArray(allIssues) ? allIssues : []).filter((item) => {
+        if (!item || typeof item !== "object") return false;
+        return !("pull_request" in (item as Record<string, unknown>));
+      }) as GitHubIssue[];
 
       const defects = issuesOnly.filter((d) =>
         d.labels.some((l) => l.name.toLowerCase() === "bug")
@@ -60,7 +63,7 @@ export default function DashboardPage() {
       // Find linked stories using story_id frontmatter already returned by the testcases endpoint
       const linkedStoryIds = new Set<number>();
       for (const tc of testCases) {
-        const raw = (tc as any).story_id;
+        const raw = tc.story_id;
         if (!raw) continue;
         const m = String(raw).match(/\d+/);
         if (m) linkedStoryIds.add(parseInt(m[0], 10));
@@ -103,8 +106,8 @@ export default function DashboardPage() {
         closed: closedDefects.length,
         bySeverity,
       });
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load dashboard");
     } finally {
       setLoading(false);
     }
@@ -162,12 +165,12 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-6">
         <h1 className="text-3xl font-bold">Dashboard</h1>
         <button
           onClick={exportToCSV}
-          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 w-full sm:w-auto"
         >
           Export to CSV
         </button>

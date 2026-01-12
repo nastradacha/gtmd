@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextRequest } from "next/server";
 import { getRepoEnv, resolveActiveProject } from "@/lib/projects";
+import { createHash } from "crypto";
 
 export const runtime = "nodejs";
 
@@ -49,6 +50,14 @@ type GraphQLFieldValue = {
 
 const projectIssueStatusCache: Map<string, ProjectIssueStatusCacheEntry> = new Map();
 const PROJECT_ISSUE_STATUS_CACHE_TTL_MS = 60_000;
+
+type IssuesResponseCacheEntry = {
+  ts: number;
+  body: string;
+};
+
+const issuesResponseCache: Map<string, IssuesResponseCacheEntry> = new Map();
+const ISSUES_RESPONSE_CACHE_TTL_MS = 60_000;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object") return null;
@@ -245,6 +254,17 @@ export async function GET(req: NextRequest) {
   if (milestone) params.append("milestone", milestone);
   if (assignee) params.append("assignee", assignee);
 
+  const { project } = resolveActiveProject(req);
+  const projectUrl = project?.storiesProjectUrl;
+  const statusFieldName = project?.storiesProjectStatusField || "Status";
+
+  const tokenKey = createHash("sha256").update(accessToken).digest("hex").slice(0, 16);
+  const cacheKey = `${tokenKey}::${owner}/${name}::${params.toString()}::${includeProjectStatus ? "1" : "0"}::${projectUrl || ""}::${statusFieldName}`;
+  const cached = issuesResponseCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < ISSUES_RESPONSE_CACHE_TTL_MS) {
+    return new Response(cached.body, { status: 200, headers: { "X-Cache": "HIT" } });
+  }
+
   try {
     const res = await fetch(
       `https://api.github.com/repos/${owner}/${name}/issues?${params}`,
@@ -263,10 +283,6 @@ export async function GET(req: NextRequest) {
     }
 
     const data = await res.json();
-
-    const { project } = resolveActiveProject(req);
-    const projectUrl = project?.storiesProjectUrl;
-    const statusFieldName = project?.storiesProjectStatusField || "Status";
 
     if (
       includeProjectStatus &&
@@ -290,13 +306,19 @@ export async function GET(req: NextRequest) {
           return status ? { ...rec, gtmd_project_status: status } : rec;
         });
 
-        return new Response(JSON.stringify(augmented), { status: 200 });
+        const body = JSON.stringify(augmented);
+        issuesResponseCache.set(cacheKey, { ts: Date.now(), body });
+        return new Response(body, { status: 200, headers: { "X-Cache": "MISS" } });
       } catch {
-        return new Response(JSON.stringify(data), { status: 200 });
+        const body = JSON.stringify(data);
+        issuesResponseCache.set(cacheKey, { ts: Date.now(), body });
+        return new Response(body, { status: 200, headers: { "X-Cache": "MISS" } });
       }
     }
 
-    return new Response(JSON.stringify(data), { status: 200 });
+    const body = JSON.stringify(data);
+    issuesResponseCache.set(cacheKey, { ts: Date.now(), body });
+    return new Response(body, { status: 200, headers: { "X-Cache": "MISS" } });
   } catch {
     return new Response(
       JSON.stringify({ error: "Failed to fetch issues" }),

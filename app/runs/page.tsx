@@ -45,6 +45,12 @@ type SessionMetadata = {
   tester: string;
 };
 
+type StepResult = {
+  name: string;
+  result: "pass" | "fail" | "skip" | null;
+  notes: string;
+};
+
 export default function RunsPage() {
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +64,6 @@ export default function RunsPage() {
     build: "",
     tester: "",
   });
-  const [storiesRepo, setStoriesRepo] = useState("");
 
   // Filters for test selection
   const [filterSuite, setFilterSuite] = useState("");
@@ -71,30 +76,17 @@ export default function RunsPage() {
 
   useEffect(() => {
     fetchTestCases();
-    fetchConfig();
   }, []);
-
-  async function fetchConfig() {
-    try {
-      const res = await fetch("/api/admin/config");
-      if (res.ok) {
-        const data = await res.json();
-        setStoriesRepo(data.storiesRepo || "");
-      }
-    } catch (e) {
-      // Silently fail, will use empty repo
-    }
-  }
 
   // Parse multi-line steps text into an array of step items
   function parseStepsText(text?: string) {
-    if (!text) return [] as { name: string; result: "pass" | "fail" | "skip" | null; notes: string }[];
+    if (!text) return [] as StepResult[];
     const lines = text
       .split(/\r?\n/)
       .map((l: string) => l.trim())
       .filter(Boolean)
       .map((l: string) => l.replace(/^\d+\s*[).:-]\s*/, ""));
-    return lines.map((name: string) => ({ name, result: null as any, notes: "" }));
+    return lines.map((name: string) => ({ name, result: null, notes: "" }));
   }
 
   function toggleSqlSection(index: number, section: "data" | "setup" | "verification" | "teardown") {
@@ -147,10 +139,10 @@ export default function RunsPage() {
       setLoading(true);
       const res = await fetch("/api/github/testcases");
       if (!res.ok) throw new Error("Failed to fetch test cases");
-      const data = await res.json();
+      const data = (await res.json()) as TestCase[];
       setTestCases(data);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to fetch test cases");
     } finally {
       setLoading(false);
     }
@@ -181,12 +173,12 @@ export default function RunsPage() {
       expected: tc.expected,
       preconditions: tc.preconditions,
       data: tc.data,
-      setup_sql: (tc as any).setup_sql,
-      verification_sql: (tc as any).verification_sql,
-      teardown_sql: (tc as any).teardown_sql,
-      setup_sql_file: (tc as any).setup_sql_file,
-      verification_sql_file: (tc as any).verification_sql_file,
-      teardown_sql_file: (tc as any).teardown_sql_file,
+      setup_sql: tc.setup_sql,
+      verification_sql: tc.verification_sql,
+      teardown_sql: tc.teardown_sql,
+      setup_sql_file: tc.setup_sql_file,
+      verification_sql_file: tc.verification_sql_file,
+      teardown_sql_file: tc.teardown_sql_file,
       story_id: tc.story_id,
       result: null,
       notes: "",
@@ -249,9 +241,7 @@ export default function RunsPage() {
 
   function copyToClipboard(text: string) {
     try {
-      // @ts-ignore
       if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-        // @ts-ignore
         navigator.clipboard.writeText(text);
       }
     } catch {}
@@ -379,8 +369,8 @@ export default function RunsPage() {
         build: "",
         tester: "",
       });
-    } catch (e: any) {
-      alert(`Error submitting session: ${e.message}`);
+    } catch (e: unknown) {
+      alert(`Error submitting session: ${e instanceof Error ? e.message : "Unknown error"}`);
     } finally {
       setSubmitting(false);
     }
@@ -434,7 +424,7 @@ export default function RunsPage() {
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <h1 className="text-2xl font-bold mb-4">Test Run Sessions</h1>
         <div>Loading test cases...</div>
       </div>
@@ -443,7 +433,7 @@ export default function RunsPage() {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <h1 className="text-2xl font-bold mb-4">Test Run Sessions</h1>
         <div className="text-red-600">{error}</div>
       </div>
@@ -451,7 +441,7 @@ export default function RunsPage() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Test Run Sessions</h1>
 
       {successMessage && (
@@ -594,7 +584,7 @@ export default function RunsPage() {
 
             <button
               onClick={startSession}
-              className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
+              className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 w-full sm:w-auto"
             >
               Start Session
             </button>
@@ -608,38 +598,43 @@ export default function RunsPage() {
             <ol className="text-sm text-blue-800 space-y-1 ml-4 list-decimal">
               <li>Click the <strong>arrow (▶)</strong> next to a test to see its steps and expected results</li>
               <li>Follow the test steps and perform the actions</li>
-              <li>In the <strong>"Execution Notes"</strong> field, describe what actually happened (e.g., "Login successful - dashboard loaded")</li>
+              <li>
+                In the <strong>{`"Execution Notes"`}</strong> field, describe what actually happened (e.g.,{" "}
+                {`"Login successful - dashboard loaded"`})
+              </li>
               <li>Click <strong>Pass</strong>, <strong>Fail</strong>, or <strong>Skip</strong> based on whether the actual results match the expected results</li>
-              <li>Repeat for all tests, then click <strong>"Submit Session"</strong> at the bottom</li>
+              <li>
+                Repeat for all tests, then click <strong>{`"Submit Session"`}</strong> at the bottom
+              </li>
             </ol>
           </div>
 
           {/* Session Header */}
           <div className="border rounded-lg p-4 bg-white">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
               <div>
                 <h2 className="text-lg font-semibold">{sessionMetadata.name}</h2>
                 <div className="text-sm text-gray-600">
                   {sessionMetadata.environment} • {sessionMetadata.browser || "No browser"} • {sessionMetadata.build || "No build"}
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <button
                   onClick={exportSessionCSV}
-                  className="px-4 py-2 border rounded hover:bg-gray-50 text-sm"
+                  className="px-4 py-2 border rounded hover:bg-gray-50 text-sm w-full sm:w-auto"
                 >
                   Export CSV
                 </button>
                 <button
                   onClick={cancelSession}
-                  className="px-4 py-2 border rounded hover:bg-gray-50 text-sm text-red-600"
+                  className="px-4 py-2 border rounded hover:bg-gray-50 text-sm text-red-600 w-full sm:w-auto"
                 >
                   Cancel Session
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-4 text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
               <div className="p-3 bg-gray-50 rounded">
                 <div className="text-2xl font-bold">{sessionTests.length}</div>
                 <div className="text-sm text-gray-600">Total Tests</div>
@@ -661,7 +656,404 @@ export default function RunsPage() {
 
           {/* Test List */}
           <div className="border rounded-lg bg-white">
-            <div className="overflow-x-auto">
+            <div className="md:hidden divide-y">
+              {sessionTests.map((test, index) => (
+                <div key={test.path} className="p-4">
+                  <div className="flex items-start gap-3">
+                    <button
+                      onClick={() => toggleTestExpanded(index)}
+                      className="text-gray-500 hover:text-gray-700 focus:outline-none mt-0.5"
+                      title={test.expanded ? "Collapse" : "Expand to see steps"}
+                    >
+                      <svg
+                        className={`w-4 h-4 transform transition-transform ${test.expanded ? "rotate-90" : ""}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5l7 7-7 7"
+                        />
+                      </svg>
+                    </button>
+
+                    <div className="flex-1">
+                      <div className="text-sm font-medium">{index + 1}. {test.title}</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {test.suite && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-700 border">
+                            Suite: {test.suite}
+                          </span>
+                        )}
+                        {test.priority && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-700 border">
+                            Priority: {test.priority}
+                          </span>
+                        )}
+                        {test.component && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-700 border">
+                            Component: {test.component}
+                          </span>
+                        )}
+                        {test.story_id && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-700 border">
+                            Story: {test.story_id}
+                          </span>
+                        )}
+                        {test.result && (
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded border font-semibold ${
+                              test.result === "pass"
+                                ? "bg-green-600 text-white border-green-600"
+                                : test.result === "fail"
+                                  ? "bg-red-600 text-white border-red-600"
+                                  : "bg-yellow-600 text-white border-yellow-600"
+                            }`}
+                          >
+                            {test.result.toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-3 gap-2">
+                        <button
+                          onClick={() => updateTestResult(index, "pass")}
+                          className={`px-3 py-2 rounded text-sm font-medium ${
+                            test.result === "pass"
+                              ? "bg-green-600 text-white"
+                              : "bg-gray-100 text-gray-700 hover:bg-green-100"
+                          }`}
+                        >
+                          Pass
+                        </button>
+                        <button
+                          onClick={() => updateTestResult(index, "fail")}
+                          className={`px-3 py-2 rounded text-sm font-medium ${
+                            test.result === "fail"
+                              ? "bg-red-600 text-white"
+                              : "bg-gray-100 text-gray-700 hover:bg-red-100"
+                          }`}
+                        >
+                          Fail
+                        </button>
+                        <button
+                          onClick={() => updateTestResult(index, "skip")}
+                          className={`px-3 py-2 rounded text-sm font-medium ${
+                            test.result === "skip"
+                              ? "bg-yellow-600 text-white"
+                              : "bg-gray-100 text-gray-700 hover:bg-yellow-100"
+                          }`}
+                        >
+                          Skip
+                        </button>
+                      </div>
+
+                      <div className="mt-3">
+                        <textarea
+                          value={test.notes}
+                          onChange={(e) => updateTestNotes(index, e.target.value)}
+                          placeholder="Enter what happened during execution...&#10;e.g., 'Login successful - redirected to dashboard'&#10;or 'Login failed - error message displayed'"
+                          className="w-full border rounded px-3 py-2 text-sm min-h-[80px] resize-y"
+                          rows={3}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Describe the actual result you observed</p>
+                      </div>
+
+                      {test.expanded && (
+                        <div className="mt-3 bg-blue-50 border border-blue-100 rounded-lg p-3">
+                          <div className="space-y-3">
+                            {test.preconditions && (
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-700 mb-1">📋 Preconditions:</h4>
+                                <div className="text-sm text-gray-800 whitespace-pre-wrap bg-white p-3 rounded border">
+                                  {test.preconditions}
+                                </div>
+                              </div>
+                            )}
+
+                            {test.data && (
+                              <div>
+                                <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+                                  <h4 className="text-sm font-semibold text-gray-700">🧪 Test Data / SQL:</h4>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => copyToClipboard(test.data || "")}
+                                      className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title="Copy to clipboard"
+                                    >
+                                      Copy
+                                    </button>
+                                    <button
+                                      onClick={() => toggleSqlSection(index, "data")}
+                                      className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title={test.showDataSql ? "Collapse" : "Expand"}
+                                    >
+                                      {test.showDataSql ? "Hide" : "Show"}
+                                    </button>
+                                  </div>
+                                </div>
+                                {test.showDataSql && (
+                                  <pre className="text-xs text-gray-800 bg-white p-3 rounded border whitespace-pre-wrap overflow-auto">{test.data}</pre>
+                                )}
+                              </div>
+                            )}
+
+                            {(test.setup_sql || test.setup_sql_file) && (
+                              <div>
+                                <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+                                  <h4 className="text-sm font-semibold text-gray-700">⚙️ Setup SQL{test.setup_sql_file ? ` (${test.setup_sql_file})` : ""}:</h4>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => copyToClipboard((test.setup_sql || test.loaded_setup_sql || ""))}
+                                      className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title="Copy to clipboard"
+                                    >
+                                      Copy
+                                    </button>
+                                    <button
+                                      onClick={() => toggleSqlSection(index, "setup")}
+                                      className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title={test.showSetupSql ? "Collapse" : "Expand"}
+                                    >
+                                      {test.showSetupSql ? "Hide" : "Show"}
+                                    </button>
+                                  </div>
+                                </div>
+                                {test.showSetupSql && (
+                                  typeof test.loaded_setup_sql === "undefined" && !test.setup_sql && test.setup_sql_file ? (
+                                    <div className="text-xs text-gray-600">Loading SQL from file...</div>
+                                  ) : (
+                                    renderSqlBlock(test.setup_sql || test.loaded_setup_sql)
+                                  )
+                                )}
+                              </div>
+                            )}
+
+                            {(test.verification_sql || test.verification_sql_file) && (
+                              <div>
+                                <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+                                  <h4 className="text-sm font-semibold text-gray-700">🔍 Verification SQL{test.verification_sql_file ? ` (${test.verification_sql_file})` : ""}:</h4>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => copyToClipboard((test.verification_sql || test.loaded_verification_sql || ""))}
+                                      className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title="Copy to clipboard"
+                                    >
+                                      Copy
+                                    </button>
+                                    <button
+                                      onClick={() => toggleSqlSection(index, "verification")}
+                                      className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title={test.showVerificationSql ? "Collapse" : "Expand"}
+                                    >
+                                      {test.showVerificationSql ? "Hide" : "Show"}
+                                    </button>
+                                  </div>
+                                </div>
+                                {test.showVerificationSql && (
+                                  typeof test.loaded_verification_sql === "undefined" && !test.verification_sql && test.verification_sql_file ? (
+                                    <div className="text-xs text-gray-600">Loading SQL from file...</div>
+                                  ) : (
+                                    renderSqlBlock(test.verification_sql || test.loaded_verification_sql)
+                                  )
+                                )}
+                              </div>
+                            )}
+
+                            {(test.teardown_sql || test.teardown_sql_file) && (
+                              <div>
+                                <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+                                  <h4 className="text-sm font-semibold text-gray-700">🧹 Teardown SQL{test.teardown_sql_file ? ` (${test.teardown_sql_file})` : ""}:</h4>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => copyToClipboard((test.teardown_sql || test.loaded_teardown_sql || ""))}
+                                      className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title="Copy to clipboard"
+                                    >
+                                      Copy
+                                    </button>
+                                    <button
+                                      onClick={() => toggleSqlSection(index, "teardown")}
+                                      className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                                      title={test.showTeardownSql ? "Collapse" : "Expand"}
+                                    >
+                                      {test.showTeardownSql ? "Hide" : "Show"}
+                                    </button>
+                                  </div>
+                                </div>
+                                {test.showTeardownSql && (
+                                  typeof test.loaded_teardown_sql === "undefined" && !test.teardown_sql && test.teardown_sql_file ? (
+                                    <div className="text-xs text-gray-600">Loading SQL from file...</div>
+                                  ) : (
+                                    renderSqlBlock(test.teardown_sql || test.loaded_teardown_sql)
+                                  )
+                                )}
+                              </div>
+                            )}
+
+                            {test.stepResults && test.stepResults.length > 0 ? (
+                              <div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <h4 className="text-sm font-semibold text-gray-700">🔢 Test Steps</h4>
+                                  <div className="flex gap-1">
+                                    <button
+                                      className="px-2 py-1 text-xs rounded border hover:bg-green-50"
+                                      onClick={() => markAllSteps(index, "pass")}
+                                      title="Mark all steps as Pass"
+                                    >
+                                      All Pass
+                                    </button>
+                                    <button
+                                      className="px-2 py-1 text-xs rounded border hover:bg-red-50"
+                                      onClick={() => markAllSteps(index, "fail")}
+                                      title="Mark all steps as Fail"
+                                    >
+                                      All Fail
+                                    </button>
+                                    <button
+                                      className="px-2 py-1 text-xs rounded border hover:bg-yellow-50"
+                                      onClick={() => markAllSteps(index, "skip")}
+                                      title="Mark all steps as Skip"
+                                    >
+                                      All Skip
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="space-y-2">
+                                  {test.stepResults.map((s, si) => (
+                                    <div key={si} className="bg-white border rounded p-2">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="text-sm text-gray-800 flex-1">{s.name}</div>
+                                        <div className="flex gap-1">
+                                          <button
+                                            onClick={() => updateStepResult(index, si, "pass")}
+                                            className={`px-2 py-0.5 rounded text-xs ${s.result === "pass" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-green-100"}`}
+                                            title="Mark step Pass"
+                                          >
+                                            Pass
+                                          </button>
+                                          <button
+                                            onClick={() => updateStepResult(index, si, "fail")}
+                                            className={`px-2 py-0.5 rounded text-xs ${s.result === "fail" ? "bg-red-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-red-100"}`}
+                                            title="Mark step Fail"
+                                          >
+                                            Fail
+                                          </button>
+                                          <button
+                                            onClick={() => updateStepResult(index, si, "skip")}
+                                            className={`px-2 py-0.5 rounded text-xs ${s.result === "skip" ? "bg-yellow-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-yellow-100"}`}
+                                            title="Mark step Skip"
+                                          >
+                                            Skip
+                                          </button>
+                                        </div>
+                                      </div>
+                                      <textarea
+                                        value={s.notes}
+                                        onChange={(e) => updateStepNotes(index, si, e.target.value)}
+                                        placeholder="Step-specific notes (optional)"
+                                        className="mt-2 w-full border rounded px-2 py-1 text-xs min-h-[40px] resize-y"
+                                        rows={2}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              test.steps ? (
+                                <div>
+                                  <h4 className="text-sm font-semibold text-gray-700 mb-1">🔢 Test Steps</h4>
+                                  <div className="text-sm text-gray-800 whitespace-pre-wrap bg-white p-3 rounded border">
+                                    {test.steps}
+                                  </div>
+                                </div>
+                              ) : null
+                            )}
+
+                            {test.expected && (
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-700 mb-1">✅ Expected Results:</h4>
+                                <div className="text-sm text-gray-800 whitespace-pre-wrap bg-white p-3 rounded border">
+                                  {test.expected}
+                                </div>
+                              </div>
+                            )}
+
+                            {!test.steps && !test.expected && (
+                              <div className="text-sm text-gray-500 italic">No test steps available for this test case.</div>
+                            )}
+
+                            {test.result === "fail" && (
+                              <div className="mt-4 pt-4 border-t">
+                                <button
+                                  onClick={() => {
+                                    const storyId = test.story_id || "";
+                                    const testPath = test.path;
+                                    const failNotes = test.notes || "";
+                                    const title = `[BUG] ${test.title || "Test failure in session"}`;
+                                    const stepsRendered = (test.stepResults && test.stepResults.length)
+                                      ? test.stepResults
+                                          .map((s, i) => `${i + 1}. [${(s.result || "N/A").toString().toUpperCase()}] ${s.name}${s.notes ? ` - ${s.notes}` : ""}`)
+                                          .join("\n")
+                                      : `See test case: ${testPath}`;
+
+                                    const description = `## Bug Description
+Test case failed during bulk session execution.
+
+## Test Case
+${testPath}
+
+## Steps to Reproduce
+${stepsRendered}
+
+## Expected Behavior
+${test.expected || "Test should pass."}
+
+## Actual Behavior
+Test failed with notes: ${failNotes}
+
+## Additional Context
+- Session: ${sessionMetadata.name}
+- Environment: ${sessionMetadata.environment}
+- Browser: ${sessionMetadata.browser || "N/A"}
+- Build: ${sessionMetadata.build || "N/A"}
+- Tester: ${sessionMetadata.tester || "N/A"}
+- Execution notes: ${failNotes}
+`;
+
+                                    const params = new URLSearchParams({
+                                      title,
+                                      description,
+                                      severity: "Medium",
+                                      priority: "P2",
+                                    });
+                                    if (storyId) params.set("story_id", storyId);
+                                    if (testPath) params.set("test_case", testPath);
+                                    window.open(`https://gtmd.vercel.app/defects?${params.toString()}`, "_blank");
+                                  }}
+                                  className="w-full px-4 py-2 rounded bg-orange-600 text-white text-sm hover:bg-orange-700 flex items-center justify-center gap-2"
+                                  title="Create a defect issue from this failure"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                  </svg>
+                                  Create Defect from Failure
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b">
                   <tr>
@@ -1043,10 +1435,10 @@ Test failed with notes: ${failNotes}
           </div>
 
           {/* Submit Button */}
-          <div className="flex justify-end gap-3">
+          <div className="flex flex-col sm:flex-row sm:justify-end gap-3">
             <button
               onClick={cancelSession}
-              className="px-6 py-2 border rounded hover:bg-gray-50"
+              className="px-6 py-2 border rounded hover:bg-gray-50 w-full sm:w-auto"
               disabled={submitting}
             >
               Cancel
@@ -1054,7 +1446,7 @@ Test failed with notes: ${failNotes}
             <button
               onClick={submitSession}
               disabled={submitting || executedCount === 0}
-              className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+              className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50 w-full sm:w-auto"
             >
               {submitting ? "Submitting..." : `Submit Session (${executedCount} tests)`}
             </button>

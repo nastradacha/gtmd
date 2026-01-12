@@ -1,10 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TestCase, TestCaseFormData } from "@/lib/types";
+import { GitHubIssue, TestCase, TestCaseFormData } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import UserSelector from "@/components/UserSelector";
+
+type TestCaseRun = {
+  result?: string;
+  notes?: string;
+  executed_by?: string;
+  executed_at?: string;
+};
+
+type TestCasesRunsResponse = {
+  latest?: TestCaseRun | null;
+  runs?: TestCaseRun[];
+};
 
 export default function TestCasesPage() {
   const [files, setFiles] = useState<TestCase[]>([]);
@@ -18,8 +30,8 @@ export default function TestCasesPage() {
   const [editText, setEditText] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [actionLoading, setActionLoading] = useState<boolean>(false);
-  const [latestRun, setLatestRun] = useState<any | null>(null);
-  const [runHistory, setRunHistory] = useState<any[]>([]);
+  const [latestRun, setLatestRun] = useState<TestCaseRun | null>(null);
+  const [runHistory, setRunHistory] = useState<TestCaseRun[]>([]);
   const [lastPrNumber, setLastPrNumber] = useState<number | null>(null);
   const [lastPrUrl, setLastPrUrl] = useState<string | null>(null);
   const [lastPrState, setLastPrState] = useState<string | null>(null);
@@ -29,10 +41,12 @@ export default function TestCasesPage() {
   const [selectedPending, setSelectedPending] = useState<boolean>(false);
   const [selectedPrUrl, setSelectedPrUrl] = useState<string | null>(null);
   const [folderFilter, setFolderFilter] = useState<string>("");
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [mobilePane, setMobilePane] = useState<"list" | "details">("list");
   const [assignUser, setAssignUser] = useState<string>("");
   const [assignmentMessage, setAssignmentMessage] = useState<string | null>(null);
   const [selectedTestCase, setSelectedTestCase] = useState<TestCase | null>(null);
-  const [storyPreview, setStoryPreview] = useState<any | null>(null);
+  const [storyPreview, setStoryPreview] = useState<GitHubIssue | null>(null);
   const [loadingStory, setLoadingStory] = useState(false);
   const [storiesRepo, setStoriesRepo] = useState("");
 
@@ -115,10 +129,10 @@ export default function TestCasesPage() {
     try {
       const res = await fetch("/api/github/testcases");
       if (!res.ok) throw new Error("Failed to fetch test cases");
-      const data = await res.json();
+      const data = (await res.json()) as TestCase[];
       setFiles(data);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to fetch test cases");
     }
   }
 
@@ -167,7 +181,7 @@ export default function TestCasesPage() {
         let res = await fetch(`/api/github/stories?number=${encodeURIComponent(storyId)}`);
         
         if (res.ok) {
-          const data = await res.json();
+          const data = (await res.json()) as GitHubIssue;
           setStoryPreview(data);
         } else {
           // Fallback: try extracting just the number (005 -> 5)
@@ -175,7 +189,7 @@ export default function TestCasesPage() {
           if (numericId && numericId !== storyId) {
             res = await fetch(`/api/github/stories?number=${numericId}`);
             if (res.ok) {
-              const data = await res.json();
+              const data = (await res.json()) as GitHubIssue;
               setStoryPreview(data);
             } else {
               setStoryPreview(null);
@@ -203,16 +217,19 @@ export default function TestCasesPage() {
             try {
               const r = await fetch(`/api/github/testcases/runs?path=${encodeURIComponent(f.path)}&limit=1`);
               if (!r.ok) return [f.path, null] as const;
-              const json = await r.json();
+              const json = (await r.json()) as TestCasesRunsResponse;
               return [f.path, json.latest || null] as const;
             } catch {
               return [f.path, null] as const;
             }
           })
         );
-        const map: Record<string, any> = {};
+        const map: Record<string, { result: string; executed_at: string }> = {};
         for (const [p, v] of entries) {
-          if (v) map[p] = { result: v.result, executed_at: v.executed_at };
+          if (!v) continue;
+          const result = typeof v.result === "string" ? v.result : undefined;
+          const executedAt = typeof v.executed_at === "string" ? v.executed_at : undefined;
+          if (result && executedAt) map[p] = { result, executed_at: executedAt };
         }
         setLatestByPath(map);
       } catch {
@@ -247,6 +264,8 @@ export default function TestCasesPage() {
   async function openFile(file: TestCase) {
     setContent(null);
     setSelectedFile(file.path);
+    setMobilePane("details");
+    setMobileFiltersOpen(false);
     setSelectedRef(file.ref || null);
     setSelectedPending(!!file.pending);
     setSelectedPrUrl(file.prUrl || null);
@@ -270,9 +289,9 @@ export default function TestCasesPage() {
       try {
         const runsRes = await fetch("/api/github/testcases/runs?path=" + encodeURIComponent(file.path));
         if (runsRes.ok) {
-          const runs = await runsRes.json();
+          const runs = (await runsRes.json()) as TestCasesRunsResponse;
           setLatestRun(runs.latest || null);
-          setRunHistory(runs.runs || []);
+          setRunHistory(Array.isArray(runs.runs) ? runs.runs : []);
         } else {
           setLatestRun(null);
           setRunHistory([]);
@@ -281,8 +300,8 @@ export default function TestCasesPage() {
         setLatestRun(null);
         setRunHistory([]);
       }
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to fetch file content");
     }
   }
 
@@ -303,8 +322,8 @@ export default function TestCasesPage() {
       setContent(editText);
       setEditing(false);
       setSuccessMessage("Test case updated successfully.");
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to save changes");
     } finally {
       setActionLoading(false);
     }
@@ -343,10 +362,19 @@ export default function TestCasesPage() {
       setNotes("");
       // refresh runs
       if (selectedFile) {
-        await openFile({ path: selectedFile, name: selectedFile.split("/").pop() || selectedFile, url: "", ref: selectedRef || undefined, pending: selectedPending, prUrl: selectedPrUrl || undefined } as any);
+        const fallback: TestCase = {
+          path: selectedFile,
+          name: selectedFile.split("/").pop() || selectedFile,
+          url: "",
+          ref: selectedRef || undefined,
+          pending: selectedPending,
+          prUrl: selectedPrUrl || undefined,
+        };
+        const fileToOpen = selectedTestCase && selectedTestCase.path === selectedFile ? selectedTestCase : fallback;
+        await openFile(fileToOpen);
       }
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to record result");
     } finally {
       setActionLoading(false);
     }
@@ -363,8 +391,8 @@ export default function TestCasesPage() {
       if (type === "me") {
         const meRes = await fetch("/api/github/me");
         if (!meRes.ok) throw new Error("Failed to fetch current user");
-        const me = await meRes.json();
-        assignee = me.login;
+        const me = (await meRes.json()) as { login?: string };
+        assignee = me.login || null;
       } else if (type === "user" && assignUser.trim()) {
         assignee = assignUser.trim();
       }
@@ -395,8 +423,8 @@ export default function TestCasesPage() {
         // Refresh test cases list
         await fetchTestCases();
       }
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to update assignment");
     } finally {
       setActionLoading(false);
     }
@@ -484,21 +512,21 @@ export default function TestCasesPage() {
 
       setShowForm(false);
       fetchTestCases();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to create test case");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
           <h1 className="text-3xl font-bold">Test Cases</h1>
           <button
             onClick={() => setShowForm(!showForm)}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            className="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
           >
             {showForm ? "Cancel" : "Create Test Case"}
           </button>
@@ -617,7 +645,7 @@ export default function TestCasesPage() {
                   className="w-full border rounded px-3 py-2"
                   placeholder="manual/home-page or Regression"
                 />
-                <p className="text-xs text-gray-500 mt-1">Saved under qa-testcases/{formData.folder || "manual/General"}. Use paths under "manual/…" or "Regression".</p>
+                <p className="text-xs text-gray-500 mt-1">Saved under qa-testcases/{formData.folder || "manual/General"}. Use paths under manual/… or Regression.</p>
                 <div className="mt-1 flex flex-wrap gap-2 text-xs">
                   {[
                     "manual/home-page",
@@ -797,7 +825,7 @@ export default function TestCasesPage() {
                   <select
                     value={formData.priority}
                     onChange={(e) =>
-                      setFormData({ ...formData, priority: e.target.value as any })
+                      setFormData({ ...formData, priority: e.target.value as TestCaseFormData["priority"] })
                     }
                     className="w-full border rounded px-3 py-2"
                   >
@@ -861,10 +889,10 @@ export default function TestCasesPage() {
                 {showPreconditionsHelp && (
                   <div className="text-xs text-gray-600 bg-gray-50 border rounded p-2 mb-2">
                     <div className="mb-1">Bullet list of prerequisites. Example:</div>
-                    <pre className="bg-white border rounded p-2 overflow-auto"><code>- Seed user exists: alice@example.com
+                    <pre className="bg-white border rounded p-2 overflow-auto"><code>{`- Seed user exists: alice@example.com
 - Feature flag "beta" enabled
 - Test account has balance ≥ 0
-</code></pre>
+`}</code></pre>
                   </div>
                 )}
                 <p className="text-xs text-gray-500 -mt-1 mb-2">Bulleted prerequisites (e.g., seeded data, configs, accounts).</p>
@@ -931,7 +959,7 @@ export default function TestCasesPage() {
                 {showDataHelp && (
                   <div className="text-xs text-gray-600 bg-gray-50 border rounded p-2 mb-2">
                     <div className="mb-1">Use for ad‑hoc notes or SQL needed to execute the test. For multi‑line, use YAML block style:</div>
-                    <pre className="bg-white border rounded p-2 overflow-auto"><code>data: |
+                    <pre className="bg-white border rounded p-2 overflow-auto"><code>{`data: |
   -- optional
   SELECT * FROM my_table WHERE id = 1;
 
@@ -941,7 +969,7 @@ setup_sql: |
 verification_sql_file: qa/sql/verify_user.sql
 teardown_sql: |
   DELETE FROM my_table WHERE id = 1;
-</code></pre>
+`}</code></pre>
                   </div>
                 )}
                 <textarea
@@ -988,7 +1016,7 @@ teardown_sql: |
                     
                     {storyPreview.labels && storyPreview.labels.length > 0 && (
                       <div className="flex flex-wrap gap-1 mb-3">
-                        {storyPreview.labels.map((label: any) => (
+                        {storyPreview.labels.map((label: GitHubIssue["labels"][number]) => (
                           <span
                             key={label.name}
                             className="text-[10px] px-2 py-0.5 rounded"
@@ -1017,7 +1045,7 @@ teardown_sql: |
 
                     {storyPreview.assignees && storyPreview.assignees.length > 0 && (
                       <div className="text-xs text-gray-600 mb-2">
-                        <span className="font-medium">Assigned to:</span> {storyPreview.assignees.map((a: any) => `@${a.login}`).join(", ")}
+                        <span className="font-medium">Assigned to:</span> {storyPreview.assignees.map((a: GitHubIssue["assignees"][number]) => `@${a.login}`).join(", ")}
                       </div>
                     )}
 
@@ -1061,26 +1089,69 @@ teardown_sql: |
       </div>
 
       {/* Test Cases Grid */}
+      <div className="md:hidden mb-4">
+        <div className="grid grid-cols-2 rounded-lg border bg-white overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setMobilePane("list")}
+            className={`px-3 py-2 text-sm font-medium border-r ${
+              mobilePane === "list" ? "bg-gray-900 text-white" : "bg-white text-gray-700"
+            }`}
+          >
+            List
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobilePane("details")}
+            disabled={!selectedFile}
+            className={`px-3 py-2 text-sm font-medium ${
+              mobilePane === "details" ? "bg-blue-600 text-white" : "bg-white text-gray-700"
+            } ${!selectedFile ? "opacity-50" : ""}`}
+          >
+            Preview
+          </button>
+        </div>
+      </div>
       <div className="grid gap-6 md:grid-cols-2">
         {/* Left: list */}
-        <div className="border rounded-lg p-4">
-          <div className="flex items-end justify-between mb-2">
+        <div className={`border rounded-lg p-4 ${mobilePane === "details" ? "hidden md:block" : ""}`}>
+          <div className="flex items-center justify-between gap-3 mb-2">
             <h2 className="text-lg font-semibold">Test Cases ({files.length})</h2>
-            <div className="flex items-center gap-2">
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">Folder filter</label>
-                <input
-                  type="text"
-                  value={folderFilter}
-                  onChange={(e) => setFolderFilter(e.target.value)}
-                  placeholder="e.g., manual/home-page or Regression"
-                  className="border rounded px-2 py-1 text-sm"
-                />
-              </div>
+
+            <button
+              type="button"
+              onClick={() => setMobileFiltersOpen((v) => !v)}
+              className="md:hidden px-3 py-2 rounded border text-sm hover:bg-gray-50"
+            >
+              Filters
+            </button>
+
+            <div className="hidden md:block">
+              <label className="block text-xs text-gray-600 mb-1">Folder filter</label>
+              <input
+                type="text"
+                value={folderFilter}
+                onChange={(e) => setFolderFilter(e.target.value)}
+                placeholder="e.g., manual/home-page or Regression"
+                className="border rounded px-2 py-1 text-sm w-56"
+              />
             </div>
           </div>
 
-          <div className="space-y-2 max-h-[70vh] overflow-auto">
+          {mobileFiltersOpen && (
+            <div className="md:hidden mb-3">
+              <label className="block text-xs text-gray-600 mb-1">Folder filter</label>
+              <input
+                type="text"
+                value={folderFilter}
+                onChange={(e) => setFolderFilter(e.target.value)}
+                placeholder="e.g., manual/home-page or Regression"
+                className="w-full border rounded px-3 py-2 text-sm"
+              />
+            </div>
+          )}
+
+          <div className="space-y-2 md:max-h-[70vh] md:overflow-auto">
             {files
               .filter((f) => !folderFilter || f.path.toLowerCase().includes(`qa-testcases/${folderFilter}`.toLowerCase()))
               .map((f) => (
@@ -1161,9 +1232,18 @@ teardown_sql: |
         </div>
 
         {/* Right: preview/edit */}
-        <div className="border rounded-lg p-4">
+        <div className={`border rounded-lg p-4 ${mobilePane === "list" ? "hidden md:block" : ""}`}>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">{editing ? "Edit Test Case" : "Preview"}</h2>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMobilePane("list")}
+                className="md:hidden px-3 py-2 rounded border text-sm hover:bg-gray-50"
+              >
+                Back
+              </button>
+              <h2 className="text-lg font-semibold">{editing ? "Edit Test Case" : "Preview"}</h2>
+            </div>
             {selectedFile && (
               <div className="flex gap-2">
                 {!editing ? (
@@ -1291,10 +1371,24 @@ teardown_sql: |
                               ul: ({node, ...props}) => <ul className="list-disc list-inside space-y-1.5 mb-3 text-gray-700" {...props} />,
                               ol: ({node, ...props}) => <ol className="list-decimal list-inside space-y-1.5 mb-3 text-gray-700" {...props} />,
                               li: ({node, ...props}) => <li className="ml-2" {...props} />,
-                              code: ({node, inline, ...props}: any) => 
-                                inline ? 
-                                  <code className="bg-gray-100 text-red-600 px-1.5 py-0.5 rounded text-sm font-mono" {...props} /> :
-                                  <code className="block bg-gray-900 text-green-400 p-3 rounded-lg text-sm font-mono overflow-x-auto my-2" {...props} />,
+                              code: ({ node: _node, className, children, ...props }) => {
+                                const isBlock = typeof className === "string" && className.trim().length > 0;
+                                return isBlock ? (
+                                  <code
+                                    className="block bg-gray-900 text-green-400 p-3 rounded-lg text-sm font-mono overflow-x-auto my-2"
+                                    {...props}
+                                  >
+                                    {children}
+                                  </code>
+                                ) : (
+                                  <code
+                                    className="bg-gray-100 text-red-600 px-1.5 py-0.5 rounded text-sm font-mono"
+                                    {...props}
+                                  >
+                                    {children}
+                                  </code>
+                                );
+                              },
                               blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-blue-500 pl-4 italic text-gray-600 my-3" {...props} />,
                             }}
                           >
@@ -1409,7 +1503,7 @@ Test failed with notes: ${failNotes}
 
 ## Additional Context
 - Executed by: @${latestRun.executed_by}
-- Executed at: ${new Date(latestRun.executed_at).toLocaleString()}
+- Executed at: ${latestRun.executed_at ? new Date(latestRun.executed_at).toLocaleString() : "unknown"}
 - Latest run notes: ${failNotes}
 `;
                           const params = new URLSearchParams({
@@ -1438,7 +1532,7 @@ Test failed with notes: ${failNotes}
                     {latestRun ? (
                       <div>
                         <div>
-                          <span className="font-medium">Latest:</span> {String(latestRun.result).toUpperCase()} by @{latestRun.executed_by} on {new Date(latestRun.executed_at).toLocaleString()}
+                          <span className="font-medium">Latest:</span> {String(latestRun.result).toUpperCase()} by @{latestRun.executed_by} on {latestRun.executed_at ? new Date(latestRun.executed_at).toLocaleString() : "unknown"}
                         </div>
                         {latestRun.notes && (
                           <div className="mt-1">Notes: {latestRun.notes}</div>
@@ -1456,7 +1550,7 @@ Test failed with notes: ${failNotes}
                       <ul className="text-xs text-gray-600 space-y-1 max-h-40 overflow-auto">
                         {runHistory.map((r, idx) => (
                           <li key={idx}>
-                            {String(r.result).toUpperCase()} • @{r.executed_by} • {new Date(r.executed_at).toLocaleString()}
+                            {String(r.result).toUpperCase()} • @{r.executed_by} • {r.executed_at ? new Date(r.executed_at).toLocaleString() : "unknown"}
                           </li>
                         ))}
                       </ul>

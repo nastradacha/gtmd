@@ -1,11 +1,30 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { GitHubIssue, DefectFormData } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import UserSelector from "@/components/UserSelector";
 import { useSearchParams } from "next/navigation";
+
+function isDefectSeverity(value: string | null): value is DefectFormData["severity"] {
+  return value === "Critical" || value === "High" || value === "Medium" || value === "Low";
+}
+
+function isDefectPriority(value: string | null): value is DefectFormData["priority"] {
+  return value === "P1" || value === "P2" || value === "P3";
+}
+
+function isStatusFilterValue(value: string): value is "all" | "open" | "closed" {
+  return value === "open" || value === "closed" || value === "all";
+}
+
+type AssignPayload = {
+  issue_number: number;
+  me?: boolean;
+  clear?: boolean;
+  assignees?: string[];
+};
 
 export default function DefectsPage() {
   const searchParams = useSearchParams();
@@ -31,10 +50,12 @@ export default function DefectsPage() {
   
   // Story search/autocomplete
   const [storySearch, setStorySearch] = useState("");
-  const [storyResults, setStoryResults] = useState<any[]>([]);
-  const [selectedStory, setSelectedStory] = useState<any | null>(null);
+  const [storyResults, setStoryResults] = useState<GitHubIssue[]>([]);
+  const [selectedStory, setSelectedStory] = useState<GitHubIssue | null>(null);
   const [showStoryDropdown, setShowStoryDropdown] = useState(false);
   const [loadingStories, setLoadingStories] = useState(false);
+
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   // Filters
   const [severityFilter, setSeverityFilter] = useState("");
@@ -66,12 +87,8 @@ export default function DefectsPage() {
           ...prev,
           title: spTitle ?? prev.title,
           description: spDesc ?? prev.description,
-          severity: (["Critical", "High", "Medium", "Low"].includes(spSeverity || "")
-            ? (spSeverity as any)
-            : prev.severity),
-          priority: (["P1", "P2", "P3"].includes(spPriority || "")
-            ? (spPriority as any)
-            : prev.priority),
+          severity: isDefectSeverity(spSeverity) ? spSeverity : prev.severity,
+          priority: isDefectPriority(spPriority) ? spPriority : prev.priority,
           storyId: spStoryId ?? prev.storyId,
           testCaseId: spTestCase ?? prev.testCaseId,
         }));
@@ -82,13 +99,53 @@ export default function DefectsPage() {
     } catch {}
   }, [searchParams]);
 
-  useEffect(() => {
-    fetchDefects();
+  const fetchDefects = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({
+        state: statusFilter,
+        labels: "bug",
+      });
+      const res = await fetch(`/api/github/issues?${params}`);
+      if (!res.ok) throw new Error("Failed to fetch defects");
+      const data = (await res.json()) as GitHubIssue[];
+      setDefects(data);
+      setFilteredDefects(data);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to fetch defects");
+    } finally {
+      setLoading(false);
+    }
   }, [statusFilter]);
+
+  const applyFilters = useCallback(() => {
+    let filtered = [...defects];
+
+    if (severityFilter) {
+      filtered = filtered.filter((defect) =>
+        defect.labels.some((label) =>
+          label.name.toLowerCase().includes(severityFilter.toLowerCase())
+        )
+      );
+    }
+
+    if (assignedOnly && currentUser) {
+      filtered = filtered.filter((defect) =>
+        defect.assignees?.some((a) => a.login.toLowerCase() === currentUser.toLowerCase())
+      );
+    }
+
+    setFilteredDefects(filtered);
+  }, [assignedOnly, currentUser, defects, severityFilter]);
+
+  useEffect(() => {
+    void fetchDefects();
+  }, [fetchDefects]);
 
   useEffect(() => {
     applyFilters();
-  }, [defects, severityFilter, assignedOnly, currentUser]);
+  }, [applyFilters]);
 
   useEffect(() => {
     // fetch current user login for 'Assigned to me' filter
@@ -112,30 +169,36 @@ export default function DefectsPage() {
         // Try search by number/prefix first
         const res = await fetch(`/api/github/stories?number=${encodeURIComponent(search)}`);
         if (res.ok) {
-          const data = await res.json();
-          // If single result, show it
-          if (data.number) {
-            setStoryResults([data]);
-          } else if (Array.isArray(data)) {
-            setStoryResults(data.slice(0, 10));
+          const data = (await res.json()) as unknown;
+          if (Array.isArray(data)) {
+            setStoryResults((data as GitHubIssue[]).slice(0, 10));
+          } else if (
+            data &&
+            typeof data === "object" &&
+            typeof (data as { number?: unknown }).number === "number"
+          ) {
+            setStoryResults([data as GitHubIssue]);
+          } else {
+            setStoryResults([]);
           }
         } else {
           // Fallback: search all stories
           const allRes = await fetch(`/api/github/issues?state=all`);
           if (allRes.ok) {
-            const allStories = await allRes.json();
+            const allStories = (await allRes.json()) as GitHubIssue[];
             // Filter by title or number
             const filtered = allStories
-              .filter((s: any) => 
-                !s.labels.some((l: any) => l.name === 'bug') && // Exclude bugs
-                (s.number.toString().includes(search) || 
-                 s.title.toLowerCase().includes(search.toLowerCase()))
+              .filter(
+                (s) =>
+                  !s.labels.some((l) => l.name === "bug") &&
+                  (s.number.toString().includes(search) ||
+                    s.title.toLowerCase().includes(search.toLowerCase()))
               )
               .slice(0, 10);
             setStoryResults(filtered);
           }
         }
-      } catch (err) {
+      } catch {
         setStoryResults([]);
       } finally {
         setLoadingStories(false);
@@ -156,52 +219,12 @@ export default function DefectsPage() {
     }
   }, [selectedDefect]);
 
-  async function fetchDefects() {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({
-        state: statusFilter,
-        labels: "bug",
-      });
-      const res = await fetch(`/api/github/issues?${params}`);
-      if (!res.ok) throw new Error("Failed to fetch defects");
-      const data = await res.json();
-      setDefects(data);
-      setFilteredDefects(data);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function applyFilters() {
-    let filtered = [...defects];
-
-    if (severityFilter) {
-      filtered = filtered.filter((defect) =>
-        defect.labels.some((label) =>
-          label.name.toLowerCase().includes(severityFilter.toLowerCase())
-        )
-      );
-    }
-
-    if (assignedOnly && currentUser) {
-      filtered = filtered.filter((defect) =>
-        defect.assignees?.some((a) => a.login.toLowerCase() === currentUser.toLowerCase())
-      );
-    }
-
-    setFilteredDefects(filtered);
-  }
-
   async function assign(to: "me" | "clear" | "user") {
     if (!selectedDefect) return;
     try {
       setActionLoading(true);
       setStatusMessage(null);
-      const payload: any = { issue_number: selectedDefect.number };
+      const payload: AssignPayload = { issue_number: selectedDefect.number };
       if (to === "me") payload.me = true;
       if (to === "clear") payload.clear = true;
       if (to === "user") payload.assignees = assignUser ? [assignUser] : [];
@@ -213,8 +236,8 @@ export default function DefectsPage() {
       if (!res.ok) throw new Error(await res.text());
       setStatusMessage("Assignment updated.");
       await fetchDefects();
-    } catch (e: any) {
-      setStatusMessage(e.message || "Failed to update assignment");
+    } catch (e: unknown) {
+      setStatusMessage(e instanceof Error ? e.message : "Failed to update assignment");
     } finally {
       setActionLoading(false);
     }
@@ -243,8 +266,8 @@ export default function DefectsPage() {
       setStatusMessage("Defect updated.");
       setEditing(false);
       await fetchDefects();
-    } catch (e: any) {
-      setStatusMessage(e.message || "Failed to update defect");
+    } catch (e: unknown) {
+      setStatusMessage(e instanceof Error ? e.message : "Failed to update defect");
     } finally {
       setActionLoading(false);
     }
@@ -276,8 +299,8 @@ export default function DefectsPage() {
       setStatusMessage("Issue closed and marked as 'test'.");
       setSelectedDefect(null);
       await fetchDefects();
-    } catch (e: any) {
-      setStatusMessage(e.message || "Failed to close defect");
+    } catch (e: unknown) {
+      setStatusMessage(e instanceof Error ? e.message : "Failed to close defect");
     } finally {
       setActionLoading(false);
     }
@@ -312,8 +335,8 @@ export default function DefectsPage() {
       setStatusMessage("✅ Defect verified and closed as completed!");
       setSelectedDefect(null);
       await fetchDefects();
-    } catch (e: any) {
-      setStatusMessage(e.message || "Failed to verify defect");
+    } catch (e: unknown) {
+      setStatusMessage(e instanceof Error ? e.message : "Failed to verify defect");
     } finally {
       setActionLoading(false);
     }
@@ -392,8 +415,8 @@ ${formData.description}
       setStoryResults([]);
       setShowForm(false);
       fetchDefects();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to create defect");
     } finally {
       setSubmitting(false);
     }
@@ -408,13 +431,13 @@ ${formData.description}
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-4">
           <h1 className="text-3xl font-bold">Defects</h1>
           <button
             onClick={() => setShowForm(!showForm)}
-            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 w-full sm:w-auto"
           >
             {showForm ? "Cancel" : "Log Defect"}
           </button>
@@ -480,14 +503,17 @@ ${formData.description}
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Severity *</label>
                   <select
                     value={formData.severity}
-                    onChange={(e) =>
-                      setFormData({ ...formData, severity: e.target.value as any })
-                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (isDefectSeverity(value)) {
+                        setFormData({ ...formData, severity: value });
+                      }
+                    }}
                     className="w-full border rounded px-3 py-2"
                   >
                     <option value="Critical">Critical</option>
@@ -501,9 +527,12 @@ ${formData.description}
                   <label className="block text-sm font-medium mb-1">Priority *</label>
                   <select
                     value={formData.priority}
-                    onChange={(e) =>
-                      setFormData({ ...formData, priority: e.target.value as any })
-                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (isDefectPriority(value)) {
+                        setFormData({ ...formData, priority: value });
+                      }
+                    }}
                     className="w-full border rounded px-3 py-2"
                   >
                     <option value="P1">P1</option>
@@ -513,7 +542,7 @@ ${formData.description}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="relative">
                   <label className="block text-sm font-medium mb-1">Story ID</label>
                   <input
@@ -577,7 +606,7 @@ ${formData.description}
                           </div>
                           {story.labels && story.labels.length > 0 && (
                             <div className="flex gap-1 mt-1">
-                              {story.labels.slice(0, 3).map((label: any) => (
+                              {story.labels.slice(0, 3).map((label) => (
                                 <span
                                   key={label.name}
                                   className="text-[9px] px-1.5 py-0.5 rounded"
@@ -598,7 +627,7 @@ ${formData.description}
                   
                   {showStoryDropdown && !loadingStories && storyResults.length === 0 && storySearch && (
                     <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg p-3">
-                      <p className="text-sm text-gray-500">No stories found for "{storySearch}"</p>
+                      <p className="text-sm text-gray-500">{`No stories found for "${storySearch}"`}</p>
                     </div>
                   )}
                 </div>
@@ -621,7 +650,7 @@ ${formData.description}
               <button
                 type="submit"
                 disabled={submitting}
-                className="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700 disabled:opacity-50"
+                className="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700 disabled:opacity-50 w-full sm:w-auto"
               >
                 {submitting ? "Creating..." : "Create Defect"}
               </button>
@@ -630,44 +659,126 @@ ${formData.description}
         )}
 
         {/* Filters */}
-        <div className="flex gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Status</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="border rounded px-3 py-2"
+        <div className="mb-4">
+          <div className="md:hidden flex items-center justify-between gap-3 mb-3">
+            <div className="grid grid-cols-3 rounded-lg border bg-white overflow-hidden flex-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusFilter("open");
+                  setMobileFiltersOpen(false);
+                }}
+                className={`px-3 py-2 text-sm font-medium border-r ${
+                  statusFilter === "open" ? "bg-gray-900 text-white" : "bg-white text-gray-700"
+                }`}
+              >
+                Open
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusFilter("closed");
+                  setMobileFiltersOpen(false);
+                }}
+                className={`px-3 py-2 text-sm font-medium border-r ${
+                  statusFilter === "closed" ? "bg-gray-900 text-white" : "bg-white text-gray-700"
+                }`}
+              >
+                Closed
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusFilter("all");
+                  setMobileFiltersOpen(false);
+                }}
+                className={`px-3 py-2 text-sm font-medium ${
+                  statusFilter === "all" ? "bg-gray-900 text-white" : "bg-white text-gray-700"
+                }`}
+              >
+                All
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setMobileFiltersOpen((v) => !v)}
+              className="px-3 py-2 rounded border text-sm hover:bg-gray-50 flex-shrink-0"
             >
-              <option value="open">Open</option>
-              <option value="closed">Closed</option>
-              <option value="all">All</option>
-            </select>
+              Filters
+            </button>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Severity</label>
-            <select
-              value={severityFilter}
-              onChange={(e) => setSeverityFilter(e.target.value)}
-              className="border rounded px-3 py-2"
-            >
-              <option value="">All</option>
-              <option value="critical">Critical</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
-          </div>
+          {mobileFiltersOpen && (
+            <div className="md:hidden border rounded-lg p-3 bg-white space-y-3">
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Severity</label>
+                <select
+                  value={severityFilter}
+                  onChange={(e) => setSeverityFilter(e.target.value)}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                >
+                  <option value="">All</option>
+                  <option value="critical">Critical</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
 
-          <div className="flex items-end">
-            <label className="inline-flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={assignedOnly}
-                onChange={(e) => setAssignedOnly(e.target.checked)}
-              />
-              Assigned to me
-            </label>
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={assignedOnly}
+                  onChange={(e) => setAssignedOnly(e.target.checked)}
+                />
+                Assigned to me
+              </label>
+            </div>
+          )}
+
+          <div className="hidden md:flex gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Status</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (isStatusFilterValue(value)) setStatusFilter(value);
+                }}
+                className="border rounded px-3 py-2"
+              >
+                <option value="open">Open</option>
+                <option value="closed">Closed</option>
+                <option value="all">All</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Severity</label>
+              <select
+                value={severityFilter}
+                onChange={(e) => setSeverityFilter(e.target.value)}
+                className="border rounded px-3 py-2"
+              >
+                <option value="">All</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+
+            <div className="flex items-end">
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={assignedOnly}
+                  onChange={(e) => setAssignedOnly(e.target.checked)}
+                />
+                Assigned to me
+              </label>
+            </div>
           </div>
         </div>
 
@@ -692,11 +803,11 @@ ${formData.description}
       {/* Defect Modal */}
       {selectedDefect && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-stretch sm:items-center justify-center p-0 sm:p-4 z-50"
           onClick={() => setSelectedDefect(null)}
         >
           <div
-            className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+            className="bg-white w-full h-full sm:h-auto rounded-none sm:rounded-lg p-4 sm:p-6 sm:max-w-2xl sm:max-h-[80vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -777,19 +888,61 @@ ${formData.description}
                   <ReactMarkdown 
                     remarkPlugins={[remarkGfm]}
                     components={{
-                      h1: ({node, ...props}) => <h1 className="text-2xl font-bold text-gray-900 mb-3 pb-2 border-b" {...props} />,
-                      h2: ({node, ...props}) => <h2 className="text-xl font-semibold text-gray-800 mb-2 mt-4" {...props} />,
-                      h3: ({node, ...props}) => <h3 className="text-lg font-medium text-gray-700 mb-2 mt-3" {...props} />,
-                      p: ({node, ...props}) => <p className="text-gray-700 mb-3 leading-relaxed" {...props} />,
-                      ul: ({node, ...props}) => <ul className="list-disc list-inside space-y-1.5 mb-3 text-gray-700" {...props} />,
-                      ol: ({node, ...props}) => <ol className="list-decimal list-inside space-y-1.5 mb-3 text-gray-700" {...props} />,
-                      li: ({node, ...props}) => <li className="ml-2" {...props} />,
-                      code: ({node, inline, ...props}: any) => 
-                        inline ? 
-                          <code className="bg-gray-100 text-red-600 px-1.5 py-0.5 rounded text-sm font-mono" {...props} /> :
-                          <code className="block bg-gray-900 text-green-400 p-3 rounded-lg text-sm font-mono overflow-x-auto my-2" {...props} />,
-                      blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-red-500 pl-4 italic text-gray-600 my-3" {...props} />,
-                      a: ({node, ...props}) => <a className="text-blue-600 hover:underline" {...props} />,
+                      h1: ({ node, ...props }) => {
+                        void node;
+                        return <h1 className="text-2xl font-bold text-gray-900 mb-3 pb-2 border-b" {...props} />;
+                      },
+                      h2: ({ node, ...props }) => {
+                        void node;
+                        return <h2 className="text-xl font-semibold text-gray-800 mb-2 mt-4" {...props} />;
+                      },
+                      h3: ({ node, ...props }) => {
+                        void node;
+                        return <h3 className="text-lg font-medium text-gray-700 mb-2 mt-3" {...props} />;
+                      },
+                      p: ({ node, ...props }) => {
+                        void node;
+                        return <p className="text-gray-700 mb-3 leading-relaxed" {...props} />;
+                      },
+                      ul: ({ node, ...props }) => {
+                        void node;
+                        return <ul className="list-disc list-inside space-y-1.5 mb-3 text-gray-700" {...props} />;
+                      },
+                      ol: ({ node, ...props }) => {
+                        void node;
+                        return <ol className="list-decimal list-inside space-y-1.5 mb-3 text-gray-700" {...props} />;
+                      },
+                      li: ({ node, ...props }) => {
+                        void node;
+                        return <li className="ml-2" {...props} />;
+                      },
+                      code: ({ node, className, children, ...props }) => {
+                        void node;
+                        const isBlock = typeof className === "string" && className.trim().length > 0;
+                        return isBlock ? (
+                          <code
+                            className="block bg-gray-900 text-green-400 p-3 rounded-lg text-sm font-mono overflow-x-auto my-2"
+                            {...props}
+                          >
+                            {children}
+                          </code>
+                        ) : (
+                          <code
+                            className="bg-gray-100 text-red-600 px-1.5 py-0.5 rounded text-sm font-mono"
+                            {...props}
+                          >
+                            {children}
+                          </code>
+                        );
+                      },
+                      blockquote: ({ node, ...props }) => {
+                        void node;
+                        return <blockquote className="border-l-4 border-red-500 pl-4 italic text-gray-600 my-3" {...props} />;
+                      },
+                      a: ({ node, ...props }) => {
+                        void node;
+                        return <a className="text-blue-600 hover:underline" {...props} />;
+                      },
                     }}
                   >
                     {selectedDefect.body}
