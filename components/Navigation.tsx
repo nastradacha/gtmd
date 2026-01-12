@@ -4,12 +4,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+type NavUser = {
+  login: string;
+  avatar_url: string;
+};
+
 export default function Navigation() {
   const pathname = usePathname();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<NavUser | null>(null);
   const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [projectLoading, setProjectLoading] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     // Fetch user info to show in nav
@@ -18,6 +24,10 @@ export default function Navigation() {
       .then(setUser)
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (!user) return;
@@ -65,10 +75,10 @@ export default function Navigation() {
   ];
 
   return (
-    <nav className="bg-white border-b shadow-sm">
+    <nav className="bg-white border-b shadow-sm sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
-          <div className="flex">
+          <div className="flex items-center">
             <Link href="/dashboard" className="flex items-center">
               <span className="text-2xl font-bold text-blue-600">GTMD</span>
             </Link>
@@ -90,27 +100,28 @@ export default function Navigation() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
+            {user && projects.length > 1 && (
+              <div className="hidden sm:flex items-center gap-2">
+                <span className="text-xs text-gray-500">Project</span>
+                <select
+                  value={selectedProjectId}
+                  onChange={(e) => changeProject(e.target.value)}
+                  disabled={projectLoading}
+                  className="border rounded px-2 py-1 text-sm bg-white"
+                  title="Select project"
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {user && (
-              <>
-                {projects.length > 1 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">Project</span>
-                    <select
-                      value={selectedProjectId}
-                      onChange={(e) => changeProject(e.target.value)}
-                      disabled={projectLoading}
-                      className="border rounded px-2 py-1 text-sm bg-white"
-                      title="Select project"
-                    >
-                      {projects.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+              <div className="hidden sm:flex items-center gap-2">
                 <Link
                   href="/admin/config"
                   className="text-gray-600 hover:text-gray-900"
@@ -147,55 +158,152 @@ export default function Navigation() {
                     />
                   </svg>
                 </Link>
-              </>
+              </div>
             )}
+
             {user ? (
-              <div className="flex items-center gap-3">
+              <div className="hidden sm:flex items-center gap-3">
                 <img
                   src={user.avatar_url}
                   alt={user.login}
                   className="w-8 h-8 rounded-full"
                 />
-                <span className="text-sm font-medium text-gray-700">
-                  {user.login}
-                </span>
-                <a
+                <span className="text-sm font-medium text-gray-700">{user.login}</span>
+                <Link
                   href="/api/auth/signout"
                   className="text-sm text-gray-600 hover:text-gray-900"
                 >
                   Sign out
-                </a>
+                </Link>
               </div>
             ) : (
-              <a
+              <Link
                 href="/api/auth/signin"
-                className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
+                className="hidden sm:inline-flex bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
               >
                 Sign in with GitHub
-              </a>
+              </Link>
             )}
+
+            {user && (
+              <img
+                src={user.avatar_url}
+                alt={user.login}
+                className="w-8 h-8 rounded-full sm:hidden"
+              />
+            )}
+
+            <button
+              type="button"
+              className="sm:hidden inline-flex items-center justify-center p-2 rounded-md border text-gray-700 hover:bg-gray-50"
+              aria-controls="mobile-menu"
+              aria-expanded={mobileMenuOpen}
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              title="Menu"
+            >
+              <span className="sr-only">Open main menu</span>
+              {mobileMenuOpen ? (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
           </div>
         </div>
       </div>
 
       {/* Mobile menu */}
-      <div className="sm:hidden border-t">
-        <div className="px-2 pt-2 pb-3 space-y-1">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`block px-3 py-2 rounded-md text-base font-medium ${
-                pathname === item.href
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-gray-700 hover:bg-gray-50"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
+      {mobileMenuOpen && (
+        <div id="mobile-menu" className="sm:hidden border-t bg-white">
+          <div className="px-3 pt-3 pb-4 space-y-3">
+            {user && (
+              <div className="flex items-center gap-3 px-1">
+                <img src={user.avatar_url} alt={user.login} className="w-10 h-10 rounded-full" />
+                <div className="text-sm font-medium text-gray-800">{user.login}</div>
+              </div>
+            )}
+
+            {user && projects.length > 1 && (
+              <div>
+                <div className="text-xs text-gray-500 mb-1">Project</div>
+                <select
+                  value={selectedProjectId}
+                  onChange={(e) => changeProject(e.target.value)}
+                  disabled={projectLoading}
+                  className="w-full border rounded px-3 py-2 text-base bg-white"
+                  title="Select project"
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              {navItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`block px-3 py-3 rounded-md text-base font-medium ${
+                    pathname === item.href
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+
+            {user && (
+              <div className="space-y-1 border-t pt-2">
+                <Link
+                  href="/admin/config"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block px-3 py-3 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Admin: Config Status
+                </Link>
+                <Link
+                  href="/admin/delete-runs"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block px-3 py-3 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Admin: Delete Test Runs
+                </Link>
+              </div>
+            )}
+
+            <div className="border-t pt-2">
+              {user ? (
+                <Link
+                  href="/api/auth/signout"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block px-3 py-3 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Sign out
+                </Link>
+              ) : (
+                <Link
+                  href="/api/auth/signin"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block px-3 py-3 rounded-md text-base font-medium bg-blue-600 text-white text-center hover:bg-blue-700"
+                >
+                  Sign in with GitHub
+                </Link>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </nav>
   );
 }
