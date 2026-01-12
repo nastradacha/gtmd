@@ -3,6 +3,8 @@ export type GTMDProject = {
   name: string;
   storiesRepo?: string;
   testcasesRepo?: string;
+  storiesProjectUrl?: string;
+  storiesProjectStatusField?: string;
 };
 
 export const PROJECT_COOKIE_NAME = "gtmd_project";
@@ -33,12 +35,16 @@ function normalizeProjects(raw: unknown): GTMDProject[] {
     const name = String(obj.name || "").trim();
     const storiesRepo = typeof obj.storiesRepo === "string" ? obj.storiesRepo.trim() : "";
     const testcasesRepo = typeof obj.testcasesRepo === "string" ? obj.testcasesRepo.trim() : "";
+    const storiesProjectUrl = typeof obj.storiesProjectUrl === "string" ? obj.storiesProjectUrl.trim() : "";
+    const storiesProjectStatusField = typeof obj.storiesProjectStatusField === "string" ? obj.storiesProjectStatusField.trim() : "";
     if (!id || !name) continue;
     out.push({
       id,
       name,
       storiesRepo: storiesRepo || undefined,
       testcasesRepo: testcasesRepo || undefined,
+      storiesProjectUrl: storiesProjectUrl || undefined,
+      storiesProjectStatusField: storiesProjectStatusField || undefined,
     });
   }
   return out;

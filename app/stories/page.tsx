@@ -58,7 +58,7 @@ export default function StoriesPage() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ state: stateFilter });
+      const params = new URLSearchParams({ state: stateFilter, includeProjectStatus: "1" });
       const res = await fetch(`/api/github/issues?${params}`);
       if (!res.ok) throw new Error("Failed to fetch issues");
       const data = await res.json();
@@ -160,10 +160,22 @@ export default function StoriesPage() {
     const inProgress: GitHubIssue[] = [];
     const done: GitHubIssue[] = [];
 
+    const inProgressProjectStatuses = new Set(["in progress", "in review", "failed"]);
+
     issues.forEach((issue) => {
       if (issue.state === "closed") {
         done.push(issue);
       } else {
+        const projectStatus = (issue.gtmd_project_status || "").toLowerCase().trim();
+        if (projectStatus) {
+          if (inProgressProjectStatuses.has(projectStatus)) {
+            inProgress.push(issue);
+          } else {
+            backlog.push(issue);
+          }
+          return;
+        }
+
         const labels = issue.labels.map((l) => l.name.toLowerCase());
         if (labels.includes("in progress") || labels.includes("in-progress")) {
           inProgress.push(issue);

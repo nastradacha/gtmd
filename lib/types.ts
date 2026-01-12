@@ -2,6 +2,7 @@
 
 export interface GitHubIssue {
   id: number;
+  node_id?: string;
   number: number;
   title: string;
   body: string | null;
@@ -27,6 +28,8 @@ export interface GitHubIssue {
     login: string;
     avatar_url: string;
   };
+
+  gtmd_project_status?: string;
 }
 
 export interface TestCase {

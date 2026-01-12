@@ -1,15 +1,207 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextRequest } from "next/server";
-import { getRepoEnv } from "@/lib/projects";
+import { getRepoEnv, resolveActiveProject } from "@/lib/projects";
 
 export const runtime = "nodejs";
+
+type ProjectIssueStatusCacheEntry = {
+  ts: number;
+  byNodeId: Record<string, string>;
+};
+
+type GraphQLProjectItemsResponse = {
+  data?: {
+    user?: {
+      projectV2?: GraphQLProjectV2 | null;
+    } | null;
+    organization?: {
+      projectV2?: GraphQLProjectV2 | null;
+    } | null;
+  } | null;
+};
+
+type GraphQLProjectV2 = {
+  items?: {
+    pageInfo?: {
+      hasNextPage?: boolean | null;
+      endCursor?: string | null;
+    } | null;
+    nodes?: Array<GraphQLProjectItem | null> | null;
+  } | null;
+};
+
+type GraphQLProjectItem = {
+  content?: {
+    id?: string | null;
+  } | null;
+  fieldValues?: {
+    nodes?: Array<GraphQLFieldValue | null> | null;
+  } | null;
+};
+
+type GraphQLFieldValue = {
+  name?: string | null;
+  field?: {
+    name?: string | null;
+  } | null;
+};
+
+const projectIssueStatusCache: Map<string, ProjectIssueStatusCacheEntry> = new Map();
+const PROJECT_ISSUE_STATUS_CACHE_TTL_MS = 60_000;
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object") return null;
+  return value as Record<string, unknown>;
+}
+
+function getStringProp(value: unknown, key: string): string | undefined {
+  const rec = asRecord(value);
+  if (!rec) return undefined;
+  const v = rec[key];
+  return typeof v === "string" ? v : undefined;
+}
+
+function parseProjectV2Url(projectUrl: string): { login: string; number: number } | null {
+  try {
+    const u = new URL(projectUrl);
+    const parts = u.pathname.split("/").filter(Boolean);
+    const idx = parts.findIndex((p) => p === "projects");
+    if (idx === -1 || idx + 1 >= parts.length) return null;
+    if (idx - 1 < 0) return null;
+    const login = parts[idx - 1];
+    const number = Number(parts[idx + 1]);
+    if (!login || !Number.isFinite(number)) return null;
+    return { login, number };
+  } catch {
+    return null;
+  }
+}
+
+async function getProjectIssueStatuses(options: {
+  accessToken: string;
+  projectUrl: string;
+  statusFieldName: string;
+}): Promise<Record<string, string>> {
+  const key = `${options.projectUrl}::${options.statusFieldName}`;
+  const cached = projectIssueStatusCache.get(key);
+  if (cached && Date.now() - cached.ts < PROJECT_ISSUE_STATUS_CACHE_TTL_MS) {
+    return cached.byNodeId;
+  }
+
+  const parsed = parseProjectV2Url(options.projectUrl);
+  if (!parsed) return {};
+
+  const query = `
+    query($login: String!, $number: Int!, $after: String) {
+      user(login: $login) {
+        projectV2(number: $number) {
+          items(first: 100, after: $after) {
+            pageInfo { hasNextPage endCursor }
+            nodes {
+              content { ... on Issue { id } }
+              fieldValues(first: 20) {
+                nodes {
+                  ... on ProjectV2ItemFieldSingleSelectValue {
+                    name
+                    field { ... on ProjectV2SingleSelectField { name } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      organization(login: $login) {
+        projectV2(number: $number) {
+          items(first: 100, after: $after) {
+            pageInfo { hasNextPage endCursor }
+            nodes {
+              content { ... on Issue { id } }
+              fieldValues(first: 20) {
+                nodes {
+                  ... on ProjectV2ItemFieldSingleSelectValue {
+                    name
+                    field { ... on ProjectV2SingleSelectField { name } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const byNodeId: Record<string, string> = {};
+  let after: string | null = null;
+  let pages = 0;
+
+  while (pages < 20) {
+    const res: Response = await fetch("https://api.github.com/graphql", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${options.accessToken}`,
+        Accept: "application/vnd.github+json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query,
+        variables: {
+          login: parsed.login,
+          number: parsed.number,
+          after,
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      break;
+    }
+
+    const json = (await res.json()) as GraphQLProjectItemsResponse;
+    const project = json?.data?.user?.projectV2 ?? json?.data?.organization?.projectV2;
+    const items = project?.items;
+    const nodes = items?.nodes ?? [];
+
+    for (const item of nodes) {
+      const issueId = item?.content?.id;
+      if (!issueId) continue;
+
+      const fvNodes = Array.isArray(item?.fieldValues?.nodes) ? item.fieldValues.nodes : [];
+      for (const fv of fvNodes) {
+        const fieldName = fv?.field?.name;
+        const valueName = fv?.name;
+        if (fieldName === options.statusFieldName && typeof valueName === "string" && valueName.trim()) {
+          byNodeId[issueId] = valueName.trim();
+          break;
+        }
+      }
+    }
+
+    const pageInfo = items?.pageInfo;
+    const hasNextPage = !!pageInfo?.hasNextPage;
+    const endCursor = pageInfo?.endCursor ?? null;
+    pages += 1;
+
+    if (!hasNextPage || !endCursor) {
+      break;
+    }
+
+    after = endCursor;
+  }
+
+  projectIssueStatusCache.set(key, { ts: Date.now(), byNodeId });
+  return byNodeId;
+}
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
   }
+
+  const accessToken = session.accessToken;
 
   const repoEnv = getRepoEnv(req, "stories");
   if (!repoEnv) {
@@ -47,6 +239,7 @@ export async function GET(req: NextRequest) {
   const labels = searchParams.get("labels") || "";
   const milestone = searchParams.get("milestone") || "";
   const assignee = searchParams.get("assignee") || "";
+  const includeProjectStatus = /^(1|true)$/i.test(searchParams.get("includeProjectStatus") || "");
   const params = new URLSearchParams({ state, per_page: "100" });
   if (labels) params.append("labels", labels);
   if (milestone) params.append("milestone", milestone);
@@ -57,7 +250,7 @@ export async function GET(req: NextRequest) {
       `https://api.github.com/repos/${owner}/${name}/issues?${params}`,
       {
         headers: {
-          Authorization: `Bearer ${session.accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
           Accept: "application/vnd.github+json",
         },
         cache: "no-store",
@@ -70,8 +263,41 @@ export async function GET(req: NextRequest) {
     }
 
     const data = await res.json();
+
+    const { project } = resolveActiveProject(req);
+    const projectUrl = project?.storiesProjectUrl;
+    const statusFieldName = project?.storiesProjectStatusField || "Status";
+
+    if (
+      includeProjectStatus &&
+      projectUrl &&
+      Array.isArray(data) &&
+      data.some((i) => getStringProp(i, "state") === "open")
+    ) {
+      try {
+        const byNodeId = await getProjectIssueStatuses({
+          accessToken,
+          projectUrl,
+          statusFieldName,
+        });
+
+        const augmented = data.map((issue) => {
+          const rec = asRecord(issue);
+          if (!rec) return issue;
+
+          const nodeId = typeof rec.node_id === "string" ? rec.node_id : undefined;
+          const status = nodeId ? byNodeId[nodeId] : undefined;
+          return status ? { ...rec, gtmd_project_status: status } : rec;
+        });
+
+        return new Response(JSON.stringify(augmented), { status: 200 });
+      } catch {
+        return new Response(JSON.stringify(data), { status: 200 });
+      }
+    }
+
     return new Response(JSON.stringify(data), { status: 200 });
-  } catch (error) {
+  } catch {
     return new Response(
       JSON.stringify({ error: "Failed to fetch issues" }),
       { status: 500 }
@@ -123,7 +349,7 @@ export async function POST(req: NextRequest) {
     let title = "";
     let bodyText = "";
     let labels: string[] = [];
-    let screenshots: File[] = [] as any;
+    let screenshots: File[] = [];
 
     if (contentType.includes("multipart/form-data")) {
       const form = await req.formData();
@@ -134,7 +360,7 @@ export async function POST(req: NextRequest) {
         try { labels = JSON.parse(labelsRaw); } catch { labels = []; }
       }
       const files = form.getAll("screenshots");
-      screenshots = files.filter((f: any) => typeof File !== "undefined" ? f instanceof File : true) as any;
+      screenshots = files.filter((f): f is File => typeof f !== "string");
     } else {
       const json = await req.json();
       title = json.title || "";
@@ -173,7 +399,7 @@ export async function POST(req: NextRequest) {
           const arrBuf = await (file as Blob).arrayBuffer();
           const buf = Buffer.from(arrBuf);
 
-          const safeName = (file as any).name
+          const safeName = file.name
             ?.toString()
             .toLowerCase()
             .replace(/[^a-z0-9._-]/g, "-") || `screenshot-${Date.now()}.png`;
@@ -225,7 +451,7 @@ export async function POST(req: NextRequest) {
     }
 
     return new Response(JSON.stringify(issue), { status: 201 });
-  } catch (error) {
+  } catch {
     return new Response(
       JSON.stringify({ error: "Failed to create issue" }),
       { status: 500 }
