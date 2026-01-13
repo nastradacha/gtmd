@@ -3,6 +3,8 @@ import { authOptions } from "@/lib/auth";
 import { NextRequest } from "next/server";
 import { getRepoEnv } from "@/lib/projects";
 
+export const runtime = "nodejs";
+
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) {
@@ -46,7 +48,7 @@ export async function POST(req: NextRequest) {
     });
     const meData = await meRes.json();
     const login = meData.login || "unknown";
-    const quote = (v: any) => JSON.stringify(String(v));
+    const quote = (v: unknown) => JSON.stringify(String(v));
 
     // Get next test case ID from counter file
     let nextId = 1;
@@ -68,7 +70,7 @@ export async function POST(req: NextRequest) {
         const counterContent = Buffer.from(counterData.content, "base64").toString("utf-8");
         nextId = parseInt(counterContent.trim(), 10) + 1;
       }
-    } catch (err) {
+    } catch {
       // Counter file doesn't exist yet, start at 1
       console.log("Counter file not found, starting at TC-001");
     }
@@ -82,6 +84,48 @@ export async function POST(req: NextRequest) {
       .substring(0, 50); // Limit slug length
     const filename = `TC-${tcId}-${slug}.md`;
     const branchName = `testcase/tc-${tcId}-${slug}`;
+
+    async function readGitHubError(res: Response): Promise<string> {
+      try {
+        const text = await res.text();
+        try {
+          const parsed = JSON.parse(text) as unknown;
+          const msg =
+            parsed && typeof parsed === "object" && "message" in parsed
+              ? (parsed as { message?: unknown }).message
+              : undefined;
+          return typeof msg === "string" && msg.trim() ? msg.trim() : (text || res.statusText);
+        } catch {
+          return text || res.statusText;
+        }
+      } catch {
+        return res.statusText;
+      }
+    }
+
+    // Determine base branch (default branch may be master/main/etc.)
+    let baseBranch = "main";
+    try {
+      const repoRes = await fetch(`https://api.github.com/repos/${owner}/${name}`, {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          Accept: "application/vnd.github+json",
+        },
+        cache: "no-store",
+      });
+      if (repoRes.ok) {
+        const repoJson = (await repoRes.json()) as unknown;
+        const defaultBranch =
+          repoJson && typeof repoJson === "object" && "default_branch" in repoJson
+            ? (repoJson as { default_branch?: unknown }).default_branch
+            : undefined;
+        if (typeof defaultBranch === "string" && defaultBranch.trim()) {
+          baseBranch = defaultBranch.trim();
+        }
+      }
+    } catch {
+      // ignore
+    }
 
     // Helper to format YAML values safely (handles special chars and multi-line)
     const formatYamlValue = (value: string) => {
@@ -141,23 +185,47 @@ ${component ? `- **Component**: ${component}` : ""}
 ${env ? `- **Environment**: ${env}` : ""}
 `;
 
-    // Get default branch SHA
-    const refRes = await fetch(
-      `https://api.github.com/repos/${owner}/${name}/git/ref/heads/main`,
-      {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          Accept: "application/vnd.github+json",
-        },
-      }
-    );
+    // Get base branch SHA (fallback main/master)
+    const baseCandidates = Array.from(new Set([baseBranch, "main", "master"]));
+    let sha: string | null = null;
+    let baseRefStatus: number | null = null;
 
-    if (!refRes.ok) {
-      throw new Error(`Failed to get base branch: ${refRes.status}`);
+    for (const candidate of baseCandidates) {
+      const refRes = await fetch(
+        `https://api.github.com/repos/${owner}/${name}/git/ref/heads/${encodeURIComponent(candidate)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`,
+            Accept: "application/vnd.github+json",
+          },
+          cache: "no-store",
+        }
+      );
+
+      if (refRes.ok) {
+        const refData = (await refRes.json()) as unknown;
+        const nextSha =
+          refData && typeof refData === "object" && "object" in refData
+            ? (refData as { object?: unknown }).object
+            : undefined;
+        const shaValue =
+          nextSha && typeof nextSha === "object" && "sha" in (nextSha as object)
+            ? (nextSha as { sha?: unknown }).sha
+            : undefined;
+
+        if (typeof shaValue === "string" && shaValue.trim()) {
+          sha = shaValue;
+          baseBranch = candidate;
+          break;
+        }
+      }
+
+      baseRefStatus = refRes.status;
     }
 
-    const refData = await refRes.json();
-    const sha = refData.object.sha;
+    if (!sha) {
+      throw new Error(`Failed to get base branch: ${baseRefStatus || 500}`);
+    }
 
     // Create new branch
     const branchRes = await fetch(
@@ -177,7 +245,12 @@ ${env ? `- **Environment**: ${env}` : ""}
     );
 
     if (!branchRes.ok) {
-      throw new Error(`Failed to create branch: ${branchRes.status}`);
+      const ghMsg = await readGitHubError(branchRes);
+      const hint =
+        branchRes.status === 404 || branchRes.status === 403
+          ? ` You may not have write access to ${owner}/${name}, or the GTMD OAuth app isn't authorized for this org.`
+          : "";
+      throw new Error(`Failed to create branch: ${branchRes.status}${ghMsg ? ` (${ghMsg})` : ""}.${hint}`);
     }
 
     // Resolve folder path under qa-testcases
@@ -246,7 +319,7 @@ ${env ? `- **Environment**: ${env}` : ""}
           body: JSON.stringify({
             message: `Update test case counter to ${nextId}`,
             content: Buffer.from(String(nextId)).toString("base64"),
-            branch: "main", // Update in main, not feature branch!
+            branch: baseBranch, // Update counter in default branch
             ...(counterSha ? { sha: counterSha } : {}),
           }),
         }
@@ -272,29 +345,37 @@ ${env ? `- **Environment**: ${env}` : ""}
         title: `New Test Case: ${title}`,
         body: `## Test Case Details\n\n- **Story ID**: ${story_id || "N/A"}\n- **Priority**: ${priority || "P2"}\n- **Suite**: ${suite || "General"}\n${component ? `- **Component**: ${component}\n` : ""}- **Folder**: ${folderPath}\n\n## Description\nThis PR adds a new test case for review.\n\n### Steps\n${steps}\n\n### Expected Results\n${expected}`,
         head: branchName,
-        base: "main",
+        base: baseBranch,
       }),
     });
 
     if (!prRes.ok) {
-      throw new Error(`Failed to create PR: ${prRes.status}`);
+      const ghMsg = await readGitHubError(prRes);
+      throw new Error(`Failed to create PR: ${prRes.status}${ghMsg ? ` (${ghMsg})` : ""}`);
     }
 
-    const prData = await prRes.json();
+    const prJson = (await prRes.json()) as unknown;
+    const prRec = prJson && typeof prJson === "object" ? (prJson as Record<string, unknown>) : null;
+    const prNumber = prRec ? prRec.number : undefined;
+    const prUrl = prRec ? prRec.html_url : undefined;
+    if (typeof prNumber !== "number" || typeof prUrl !== "string") {
+      throw new Error("Failed to create PR: invalid response from GitHub");
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         pr: {
-          number: prData.number,
-          url: prData.html_url,
+          number: prNumber,
+          url: prUrl,
           branch: branchName,
         },
       }),
       { status: 201 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     return new Response(
-      JSON.stringify({ error: error.message || "Failed to create test case" }),
+      JSON.stringify({ error: error instanceof Error ? error.message : "Failed to create test case" }),
       { status: 500 }
     );
   }
