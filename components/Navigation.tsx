@@ -177,12 +177,20 @@ export default function Navigation() {
                 </Link>
               </div>
             ) : (
-              <Link
-                href="/api/auth/signin"
-                className="hidden sm:inline-flex bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
-              >
-                Sign in with GitHub
-              </Link>
+              <div className="hidden sm:flex items-center gap-3">
+                <Link
+                  href="/api/auth/signin"
+                  className="inline-flex bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
+                >
+                  Sign in with GitHub
+                </Link>
+                <Link
+                  href="/api/auth/signin/github?prompt=select_account"
+                  className="text-sm text-blue-600 hover:underline"
+                >
+                  Different account
+                </Link>
+              </div>
             )}
 
             {user && (
@@ -292,13 +300,22 @@ export default function Navigation() {
                   Sign out
                 </Link>
               ) : (
-                <Link
-                  href="/api/auth/signin"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block px-3 py-3 rounded-md text-base font-medium bg-blue-600 text-white text-center hover:bg-blue-700"
-                >
-                  Sign in with GitHub
-                </Link>
+                <div className="space-y-1">
+                  <Link
+                    href="/api/auth/signin"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block px-3 py-3 rounded-md text-base font-medium bg-blue-600 text-white text-center hover:bg-blue-700"
+                  >
+                    Sign in with GitHub
+                  </Link>
+                  <Link
+                    href="/api/auth/signin/github?prompt=select_account"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block px-3 py-3 rounded-md text-base font-medium text-blue-700 hover:bg-gray-50 text-center"
+                  >
+                    Use a different GitHub account
+                  </Link>
+                </div>
               )}
             </div>
           </div>

@@ -475,7 +475,19 @@ export default function TraceabilityPage() {
         <h1 className="text-2xl font-bold mb-4">Traceability</h1>
         <div className="text-red-600 mb-4">{error}</div>
         {isAuth && (
-          <a href="/api/auth/signin" className="text-blue-600 hover:underline">Sign in with GitHub →</a>
+          <div className="space-y-1">
+            <a href="/api/auth/signin" className="text-blue-600 hover:underline">
+              Sign in with GitHub →
+            </a>
+            <div>
+              <a
+                href="/api/auth/signin/github?prompt=select_account"
+                className="text-blue-600 hover:underline"
+              >
+                Sign in with a different GitHub account
+              </a>
+            </div>
+          </div>
         )}
       </div>
     );

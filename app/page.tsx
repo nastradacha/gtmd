@@ -41,8 +41,14 @@ export default async function Home() {
               </div>
             </a>
 
-            <div className="text-center text-sm text-gray-500 mb-4">
-              Requires GitHub account and repository access
+            <div className="text-center text-sm text-gray-500 mb-4 space-y-1">
+              <div>Requires GitHub account and repository access</div>
+              <a
+                href="/api/auth/signin/github?prompt=select_account"
+                className="text-blue-600 hover:underline"
+              >
+                Sign in with a different GitHub account
+              </a>
             </div>
           </div>
 
