@@ -5,31 +5,42 @@ import { getRepoEnv } from "@/lib/projects";
 
 function injectUpdateFrontmatter(content: string, login: string) {
   const now = new Date().toISOString();
-  if (content.startsWith("---\n")) {
-    const end = content.indexOf("\n---\n", 4);
-    if (end !== -1) {
-      const header = content.slice(4, end);
-      const body = content.slice(end + 5);
-      const lines = header.split(/\r?\n/);
-      const map: Record<string, string> = {};
-      for (const line of lines) {
-        const idx = line.indexOf(":");
-        if (idx > -1) {
-          const k = line.slice(0, idx).trim();
-          const v = line.slice(idx + 1).trim();
-          map[k] = v;
-        }
-      }
-      map["updated_by"] = login;
-      map["updated"] = now;
-      const newHeader = Object.entries(map)
-        .map(([k, v]) => `${k}: ${v}`)
-        .join("\n");
-      return `---\n${newHeader}\n---\n${body}`;
-    }
+  const quote = (v: unknown) => JSON.stringify(String(v));
+
+  const fmMatch = content.match(/^(---\s*\r?\n)([\s\S]*?)(\r?\n---\s*\r?\n)([\s\S]*)$/);
+  if (!fmMatch) {
+    return `---\nupdated_by: ${quote(login)}\nupdated: ${quote(now)}\n---\n\n${content}`;
   }
-  // no header found, add a small header
-  return `---\nupdated_by: ${login}\nupdated: ${now}\n---\n\n${content}`;
+
+  const start = fmMatch[1];
+  const frontmatter = fmMatch[2];
+  const sep = fmMatch[3];
+  const body = fmMatch[4];
+
+  const lines = frontmatter.split(/\r?\n/);
+  let hasUpdatedBy = false;
+  let hasUpdated = false;
+
+  const nextLines = lines.map((line) => {
+    if (line.startsWith("updated_by:")) {
+      hasUpdatedBy = true;
+      return `updated_by: ${quote(login)}`;
+    }
+    if (line.startsWith("updated:")) {
+      hasUpdated = true;
+      return `updated: ${quote(now)}`;
+    }
+    return line;
+  });
+
+  if (!hasUpdatedBy) nextLines.push(`updated_by: ${quote(login)}`);
+  if (!hasUpdated) nextLines.push(`updated: ${quote(now)}`);
+
+  return `${start}${nextLines.join("\n")}${sep}${body}`;
+}
+
+function encodeGitHubContentPath(path: string) {
+  return encodeURIComponent(path).replace(/%2F/g, "/");
 }
 
 export async function POST(req: NextRequest) {
@@ -77,7 +88,7 @@ export async function POST(req: NextRequest) {
 
     // Get current file to obtain sha
     const getRes = await fetch(
-      `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(path)}${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`,
+      `https://api.github.com/repos/${owner}/${name}/contents/${encodeGitHubContentPath(path)}${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`,
       {
         headers: {
           Authorization: `Bearer ${session.accessToken}`,
@@ -95,7 +106,7 @@ export async function POST(req: NextRequest) {
     const newContent = injectUpdateFrontmatter(content, login);
 
     const putRes = await fetch(
-      `https://api.github.com/repos/${owner}/${name}/contents/${encodeURIComponent(path)}`,
+      `https://api.github.com/repos/${owner}/${name}/contents/${encodeGitHubContentPath(path)}`,
       {
         method: "PUT",
         headers: {
