@@ -5,6 +5,7 @@ import { GitHubIssue, TestCase, TestCaseFormData } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import UserSelector from "@/components/UserSelector";
+import yaml from "js-yaml";
 
 type TestCaseRun = {
   result?: string;
@@ -27,7 +28,7 @@ export default function TestCasesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const [editText, setEditText] = useState<string>("");
+  const [editFrontmatter, setEditFrontmatter] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<string>("");
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [latestRun, setLatestRun] = useState<TestCaseRun | null>(null);
@@ -110,18 +111,218 @@ export default function TestCasesPage() {
     
     const frontmatter = fmMatch[1];
     const body = fmMatch[2];
-    const metadata: Record<string, string> = {};
-    
-    frontmatter.split('\n').forEach(line => {
-      const match = line.match(/^(\w+):\s*(?:["'](.+?)["']|(.+?))\s*$/);
-      if (match) {
-        const key = match[1];
-        const value = match[2] || match[3] || '';
-        metadata[key] = value.trim();
+
+    try {
+      const loaded = yaml.load(frontmatter) as unknown;
+      if (!loaded || typeof loaded !== "object" || Array.isArray(loaded)) {
+        return { metadata: {}, body };
       }
+
+      const metadata: Record<string, string> = {};
+      for (const [key, value] of Object.entries(loaded as Record<string, unknown>)) {
+        if (typeof value === "string") metadata[key] = value;
+        else if (typeof value === "number" || typeof value === "boolean") metadata[key] = String(value);
+        else if (value instanceof Date) metadata[key] = value.toISOString();
+        else if (value == null) metadata[key] = "";
+        else metadata[key] = String(value);
+      }
+
+      return { metadata, body };
+    } catch {
+      return { metadata: {}, body };
+    }
+  };
+
+  const normalizePriority = (value: string | undefined): TestCaseFormData["priority"] => {
+    if (value === "P1" || value === "P2" || value === "P3") return value;
+    return "P2";
+  };
+
+  const inferFolderFromSelectedPath = (path: string): string => {
+    const folder = folderPath(path);
+    const trimmed = folder.startsWith("qa-testcases/") ? folder.slice("qa-testcases/".length) : folder;
+    return trimmed || "manual/General";
+  };
+
+  const parseNumberedLines = (text: string): string[] => {
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((line) => line.replace(/^\d+\.[ \t]*/, "").trim())
+      .filter(Boolean);
+    return lines.length ? lines : [""];
+  };
+
+  const parseBulletedLines = (text: string): string[] => {
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((line) => line.replace(/^[-*][ \t]+/, "").trim())
+      .filter(Boolean);
+    return lines.length ? lines : [""];
+  };
+
+  const buildNumberedText = (items: string[]): string => {
+    return items
+      .filter((s) => s.trim())
+      .map((s, i) => `${i + 1}. ${s}`)
+      .join("\n");
+  };
+
+  const buildBulletedText = (items: string[]): string => {
+    return items
+      .filter((s) => s.trim())
+      .map((s) => `- ${s}`)
+      .join("\n");
+  };
+
+  const toggleAdvancedMode = () => {
+    if (useAdvancedMode) {
+      setStepsList(parseNumberedLines(formData.steps || ""));
+      setExpectedList(parseBulletedLines(formData.expected || ""));
+      setPreconditionsList(parseBulletedLines(formData.preconditions || ""));
+      setUseAdvancedMode(false);
+      return;
+    }
+
+    const stepsText = buildNumberedText(stepsList);
+    const expectedText = buildBulletedText(expectedList);
+    const preconditionsText = buildBulletedText(preconditionsList);
+    setFormData({
+      ...formData,
+      steps: stepsText,
+      expected: expectedText,
+      preconditions: preconditionsText,
     });
-    
-    return { metadata, body };
+    setUseAdvancedMode(true);
+  };
+
+  const isNumberedListLike = (text: string): boolean => {
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) return true;
+    return lines.every((line) => /^\d+\.[ \t]+/.test(line));
+  };
+
+  const isBulletedListLike = (text: string): boolean => {
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) return true;
+    return lines.every((line) => /^[-*][ \t]+/.test(line));
+  };
+
+  const extractCustomBodySections = (body: string): string => {
+    const standardSections = new Set([
+      "story reference",
+      "preconditions",
+      "test data",
+      "test steps",
+      "expected results",
+      "metadata",
+    ]);
+
+    const blocks: Array<{ header: string | null; lines: string[] }> = [];
+    let currentHeader: string | null = null;
+    let currentLines: string[] = [];
+
+    const pushBlock = () => {
+      blocks.push({ header: currentHeader, lines: currentLines });
+    };
+
+    for (const line of body.split(/\r?\n/)) {
+      const m = line.match(/^##\s+(.+?)\s*$/);
+      if (m) {
+        pushBlock();
+        currentHeader = m[1];
+        currentLines = [line];
+        continue;
+      }
+      currentLines.push(line);
+    }
+    pushBlock();
+
+    const kept: string[] = [];
+    for (const block of blocks) {
+      const headerNorm = (block.header || "").trim().toLowerCase();
+      if (block.header && standardSections.has(headerNorm)) continue;
+
+      const lines = [...block.lines];
+      if (!block.header) {
+        const firstNonEmpty = lines.findIndex((l) => l.trim() !== "");
+        if (firstNonEmpty !== -1 && /^#\s+/.test(lines[firstNonEmpty].trim())) {
+          lines.splice(firstNonEmpty, 1);
+          if (lines[firstNonEmpty] !== undefined && lines[firstNonEmpty].trim() === "") {
+            lines.splice(firstNonEmpty, 1);
+          }
+        }
+      }
+
+      const text = lines.join("\n").trim();
+      if (text) kept.push(text);
+    }
+
+    return kept.join("\n\n").trim();
+  };
+
+  const beginEdit = () => {
+    if (!content || !selectedFile) return;
+
+    setShowForm(false);
+
+    const { metadata } = parseFrontmatter(content);
+    setEditFrontmatter(metadata);
+
+    const stepsText = metadata.steps || "";
+    const expectedText = metadata.expected || "";
+    const preconditionsText = metadata.preconditions || "";
+
+    setFormData({
+      title: metadata.title || "",
+      story_id: metadata.story_id || "",
+      steps: stepsText,
+      expected: expectedText,
+      priority: normalizePriority(metadata.priority),
+      suite: metadata.suite || "General",
+      component: metadata.component || "",
+      preconditions: preconditionsText,
+      data: metadata.data || "",
+      env: metadata.env || "",
+      folder: inferFolderFromSelectedPath(selectedFile),
+      setup_sql: metadata.setup_sql || "",
+      verification_sql: metadata.verification_sql || "",
+      teardown_sql: metadata.teardown_sql || "",
+      setup_sql_file: metadata.setup_sql_file || "",
+      verification_sql_file: metadata.verification_sql_file || "",
+      teardown_sql_file: metadata.teardown_sql_file || "",
+    });
+
+    setStepsList(parseNumberedLines(stepsText));
+    setExpectedList(parseBulletedLines(expectedText));
+    setPreconditionsList(parseBulletedLines(preconditionsText));
+
+    const shouldUseTextMode =
+      (!!stepsText && !isNumberedListLike(stepsText)) ||
+      (!!expectedText && !isBulletedListLike(expectedText)) ||
+      (!!preconditionsText && !isBulletedListLike(preconditionsText));
+
+    setUseAdvancedMode(shouldUseTextMode);
+
+    setShowAdvancedSql(
+      !!(
+        (metadata.setup_sql || "").trim() ||
+        (metadata.verification_sql || "").trim() ||
+        (metadata.teardown_sql || "").trim() ||
+        (metadata.setup_sql_file || "").trim() ||
+        (metadata.verification_sql_file || "").trim() ||
+        (metadata.teardown_sql_file || "").trim()
+      )
+    );
+
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
   };
 
   // Fetch test cases function
@@ -283,8 +484,8 @@ export default function TestCasesPage() {
       const data = await res.json();
       const decoded = atob(data.content);
       setContent(decoded);
-      setEditText(decoded);
       setEditing(false);
+      setEditFrontmatter({});
       // Load run history
       try {
         const runsRes = await fetch("/api/github/testcases/runs?path=" + encodeURIComponent(file.path));
@@ -310,16 +511,179 @@ export default function TestCasesPage() {
     try {
       setActionLoading(true);
       setError(null);
+
+      const quote = (v: unknown) => JSON.stringify(String(v));
+
+      const formatYamlValue = (value: string) => {
+        if (!value) return quote(value);
+        if (value.includes("\n")) {
+          const lines = value.split("\n").map((line) => `  ${line}`).join("\n");
+          return `|\n${lines}`;
+        }
+        return quote(value);
+      };
+
+      let stepsText = formData.steps || "";
+      let expectedText = formData.expected || "";
+      let preconditionsText = formData.preconditions || "";
+
+      if (!useAdvancedMode) {
+        stepsText = stepsList
+          .filter((s) => s.trim())
+          .map((s, i) => `${i + 1}. ${s}`)
+          .join("\n");
+
+        expectedText = expectedList
+          .filter((e) => e.trim())
+          .map((e) => `- ${e}`)
+          .join("\n");
+
+        preconditionsText = preconditionsList
+          .filter((p) => p.trim())
+          .map((p) => `- ${p}`)
+          .join("\n");
+      }
+
+      const title = (formData.title || "").trim();
+      if (!title) throw new Error("Title is required.");
+
+      if (!stepsText.trim()) throw new Error("Test Steps are required.");
+      if (!expectedText.trim()) throw new Error("Expected Results are required.");
+
+      const story_id = (formData.story_id || "").trim();
+      const priority = formData.priority || "P2";
+      const suite = (formData.suite || "General").trim() || "General";
+      const component = (formData.component || "").trim();
+      const preconditions = (preconditionsText || "").trim();
+      const data = (formData.data || "").trim();
+      const env = (formData.env || "").trim();
+      const setup_sql = (formData.setup_sql || "").trim();
+      const verification_sql = (formData.verification_sql || "").trim();
+      const teardown_sql = (formData.teardown_sql || "").trim();
+      const setup_sql_file = (formData.setup_sql_file || "").trim();
+      const verification_sql_file = (formData.verification_sql_file || "").trim();
+      const teardown_sql_file = (formData.teardown_sql_file || "").trim();
+
+      const preserved = {
+        status: (editFrontmatter.status || "").trim(),
+        created: (editFrontmatter.created || "").trim(),
+        created_by: (editFrontmatter.created_by || "").trim(),
+        assigned_to: (editFrontmatter.assigned_to || "").trim(),
+        app_version: (editFrontmatter.app_version || "").trim(),
+        owner: (editFrontmatter.owner || "").trim(),
+      };
+
+      const knownKeys = new Set([
+        "title",
+        "story_id",
+        "priority",
+        "suite",
+        "component",
+        "preconditions",
+        "data",
+        "setup_sql",
+        "verification_sql",
+        "teardown_sql",
+        "setup_sql_file",
+        "verification_sql_file",
+        "teardown_sql_file",
+        "steps",
+        "expected",
+        "env",
+        "status",
+        "created",
+        "created_by",
+        "assigned_to",
+        "app_version",
+        "owner",
+        "updated",
+        "updated_by",
+      ]);
+
+      const extraFrontmatterLines = Object.keys(editFrontmatter)
+        .filter((k) => !knownKeys.has(k))
+        .sort()
+        .map((k) => {
+          const v = (editFrontmatter[k] || "").trim();
+          if (!v) return null;
+          return `${k}: ${formatYamlValue(v)}`;
+        })
+        .filter((line): line is string => Boolean(line));
+
+      const fmLines: string[] = [];
+      fmLines.push("---");
+      fmLines.push(`title: ${quote(title)}`);
+      fmLines.push(`story_id: ${quote(story_id || "")}`);
+      fmLines.push(`priority: ${quote(priority)}`);
+      fmLines.push(`suite: ${quote(suite)}`);
+      if (component) fmLines.push(`component: ${quote(component)}`);
+      if (preconditions) fmLines.push(`preconditions: ${formatYamlValue(preconditions)}`);
+      if (data) fmLines.push(`data: ${formatYamlValue(data)}`);
+      if (setup_sql) fmLines.push(`setup_sql: ${formatYamlValue(setup_sql)}`);
+      if (verification_sql) fmLines.push(`verification_sql: ${formatYamlValue(verification_sql)}`);
+      if (teardown_sql) fmLines.push(`teardown_sql: ${formatYamlValue(teardown_sql)}`);
+      if (setup_sql_file) fmLines.push(`setup_sql_file: ${quote(setup_sql_file)}`);
+      if (verification_sql_file) fmLines.push(`verification_sql_file: ${quote(verification_sql_file)}`);
+      if (teardown_sql_file) fmLines.push(`teardown_sql_file: ${quote(teardown_sql_file)}`);
+      fmLines.push(`steps: ${formatYamlValue(stepsText)}`);
+      fmLines.push(`expected: ${formatYamlValue(expectedText)}`);
+      if (env) fmLines.push(`env: ${quote(env)}`);
+      if (preserved.status) fmLines.push(`status: ${quote(preserved.status)}`);
+      if (preserved.created) fmLines.push(`created: ${quote(preserved.created)}`);
+      if (preserved.created_by) fmLines.push(`created_by: ${quote(preserved.created_by)}`);
+      if (preserved.assigned_to) fmLines.push(`assigned_to: ${quote(preserved.assigned_to)}`);
+      if (preserved.app_version) fmLines.push(`app_version: ${quote(preserved.app_version)}`);
+      if (preserved.owner) fmLines.push(`owner: ${quote(preserved.owner)}`);
+      for (const line of extraFrontmatterLines) fmLines.push(line);
+      fmLines.push("---");
+
+      const bodyParts: string[] = [];
+      bodyParts.push(`# ${title}`);
+      bodyParts.push("");
+      bodyParts.push("## Story Reference");
+      bodyParts.push(story_id ? `Story #${story_id}` : "No story linked");
+      bodyParts.push("");
+
+      if (preconditions) {
+        bodyParts.push("## Preconditions");
+        bodyParts.push(preconditions);
+        bodyParts.push("");
+      }
+
+      if (data) {
+        bodyParts.push("## Test Data");
+        bodyParts.push(data);
+        bodyParts.push("");
+      }
+
+      bodyParts.push("## Test Steps");
+      bodyParts.push(stepsText);
+      bodyParts.push("");
+      bodyParts.push("## Expected Results");
+      bodyParts.push(expectedText);
+      bodyParts.push("");
+      bodyParts.push("## Metadata");
+      bodyParts.push(`- **Priority**: ${priority}`);
+      bodyParts.push(`- **Suite**: ${suite}`);
+      if (component) bodyParts.push(`- **Component**: ${component}`);
+      if (env) bodyParts.push(`- **Environment**: ${env}`);
+
+      const originalBody = content ? parseFrontmatter(content).body : "";
+      const preservedBody = extractCustomBodySections(originalBody);
+      const combinedBody = preservedBody ? `${bodyParts.join("\n")}\n\n${preservedBody}` : bodyParts.join("\n");
+
+      const nextContent = `${fmLines.join("\n")}\n\n${combinedBody}\n`;
+
       const res = await fetch("/api/github/testcases/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: selectedFile, content: editText, ref: selectedRef || undefined }),
+        body: JSON.stringify({ path: selectedFile, content: nextContent, ref: selectedRef || undefined }),
       });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text || "Failed to save changes");
       }
-      setContent(editText);
+      setContent(nextContent);
       setEditing(false);
       setSuccessMessage("Test case updated successfully.");
     } catch (e: unknown) {
@@ -695,7 +1059,7 @@ export default function TestCasesPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setUseAdvancedMode(!useAdvancedMode)}
+                      onClick={toggleAdvancedMode}
                       className="text-xs text-blue-600 hover:underline"
                     >
                       {useAdvancedMode ? "Switch to Step Builder" : "Switch to Text Mode"}
@@ -1248,7 +1612,7 @@ teardown_sql: |
               <div className="flex gap-2">
                 {!editing ? (
                   <button
-                    onClick={() => setEditing(true)}
+                    onClick={beginEdit}
                     className="px-3 py-1.5 rounded border text-sm hover:bg-gray-50"
                   >
                     Edit
@@ -1256,7 +1620,7 @@ teardown_sql: |
                 ) : (
                   <>
                     <button
-                      onClick={() => setEditing(false)}
+                      onClick={cancelEdit}
                       className="px-3 py-1.5 rounded border text-sm hover:bg-gray-50"
                       disabled={actionLoading}
                     >
@@ -1288,11 +1652,327 @@ teardown_sql: |
           {content ? (
             <div className="max-w-none">
               {editing ? (
-                <textarea
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  className="w-full border rounded p-3 h-[55vh] font-mono text-sm"
-                />
+                <div className="space-y-4">
+                  {selectedFile && (
+                    <div className="text-xs text-gray-500">
+                      {selectedFile}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Title *</label>
+                    <input
+                      type="text"
+                      value={formData.title}
+                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                      className="w-full border rounded px-3 py-2"
+                      placeholder="e.g., Login with valid credentials"
+                    />
+                  </div>
+
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-sm font-medium mb-1">Advanced SQL (optional)</label>
+                      <button
+                        type="button"
+                        onClick={() => setShowAdvancedSql(!showAdvancedSql)}
+                        className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                      >
+                        {showAdvancedSql ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                    {showAdvancedSql && (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+                        <div>
+                          <label className="block text-xs font-medium mb-1">Setup SQL (inline)</label>
+                          <textarea
+                            value={formData.setup_sql || ""}
+                            onChange={(e) => setFormData({ ...formData, setup_sql: e.target.value })}
+                            className="w-full border rounded px-2 py-1 h-28 text-xs"
+                            placeholder="INSERT/UPDATE seed data"
+                          />
+                          <label className="block text-xs font-medium mt-2 mb-1">Setup SQL file (optional)</label>
+                          <input
+                            type="text"
+                            value={formData.setup_sql_file || ""}
+                            onChange={(e) => setFormData({ ...formData, setup_sql_file: e.target.value })}
+                            className="w-full border rounded px-2 py-1 text-xs"
+                            placeholder="qa/sql/setup.sql"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium mb-1">Verification SQL (inline)</label>
+                          <textarea
+                            value={formData.verification_sql || ""}
+                            onChange={(e) => setFormData({ ...formData, verification_sql: e.target.value })}
+                            className="w-full border rounded px-2 py-1 h-28 text-xs"
+                            placeholder="SELECT ... to verify expected state"
+                          />
+                          <label className="block text-xs font-medium mt-2 mb-1">Verification SQL file (optional)</label>
+                          <input
+                            type="text"
+                            value={formData.verification_sql_file || ""}
+                            onChange={(e) => setFormData({ ...formData, verification_sql_file: e.target.value })}
+                            className="w-full border rounded px-2 py-1 text-xs"
+                            placeholder="qa/sql/verify.sql"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium mb-1">Teardown SQL (inline)</label>
+                          <textarea
+                            value={formData.teardown_sql || ""}
+                            onChange={(e) => setFormData({ ...formData, teardown_sql: e.target.value })}
+                            className="w-full border rounded px-2 py-1 h-28 text-xs"
+                            placeholder="DELETE cleanup statements"
+                          />
+                          <label className="block text-xs font-medium mt-2 mb-1">Teardown SQL file (optional)</label>
+                          <input
+                            type="text"
+                            value={formData.teardown_sql_file || ""}
+                            onChange={(e) => setFormData({ ...formData, teardown_sql_file: e.target.value })}
+                            className="w-full border rounded px-2 py-1 text-xs"
+                            placeholder="qa/sql/teardown.sql"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Story ID</label>
+                    <input
+                      type="text"
+                      value={formData.story_id}
+                      onChange={(e) => setFormData({ ...formData, story_id: e.target.value })}
+                      className="w-full border rounded px-3 py-2"
+                      placeholder="e.g., MS-005 or US-V-005 or 21"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium">Test Steps *</label>
+                      <button
+                        type="button"
+                        onClick={toggleAdvancedMode}
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        {useAdvancedMode ? "Switch to Step Builder" : "Switch to Text Mode"}
+                      </button>
+                    </div>
+                    {!useAdvancedMode ? (
+                      <div className="space-y-2">
+                        {stepsList.map((step, index) => (
+                          <div key={index} className="flex gap-2">
+                            <span className="text-sm text-gray-500 pt-2 w-8">{index + 1}.</span>
+                            <input
+                              type="text"
+                              value={step}
+                              onChange={(e) => {
+                                const updated = [...stepsList];
+                                updated[index] = e.target.value;
+                                setStepsList(updated);
+                              }}
+                              className="flex-1 border rounded px-3 py-2"
+                              placeholder={`Enter step ${index + 1}`}
+                            />
+                            {stepsList.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = stepsList.filter((_, i) => i !== index);
+                                  setStepsList(updated.length ? updated : [""]);
+                                }}
+                                className="px-3 py-2 text-red-600 hover:bg-red-50 rounded"
+                                title="Remove step"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setStepsList([...stepsList, ""])}
+                          className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                        >
+                          + Add Step
+                        </button>
+                      </div>
+                    ) : (
+                      <textarea
+                        value={formData.steps}
+                        onChange={(e) => setFormData({ ...formData, steps: e.target.value })}
+                        className="w-full border rounded px-3 py-2 h-32"
+                        placeholder="1. Navigate to login page\n2. Enter username\n3. Enter password\n4. Click login"
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Expected Results *</label>
+                    {!useAdvancedMode ? (
+                      <div className="space-y-2">
+                        {expectedList.map((expected, index) => (
+                          <div key={index} className="flex gap-2">
+                            <span className="text-sm text-gray-500 pt-2 w-8">-</span>
+                            <input
+                              type="text"
+                              value={expected}
+                              onChange={(e) => {
+                                const updated = [...expectedList];
+                                updated[index] = e.target.value;
+                                setExpectedList(updated);
+                              }}
+                              className="flex-1 border rounded px-3 py-2"
+                              placeholder={`Expected result ${index + 1}`}
+                            />
+                            {expectedList.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = expectedList.filter((_, i) => i !== index);
+                                  setExpectedList(updated.length ? updated : [""]);
+                                }}
+                                className="px-3 py-2 text-red-600 hover:bg-red-50 rounded"
+                                title="Remove expected result"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setExpectedList([...expectedList, ""])}
+                          className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                        >
+                          + Add Expected Result
+                        </button>
+                      </div>
+                    ) : (
+                      <textarea
+                        value={formData.expected}
+                        onChange={(e) => setFormData({ ...formData, expected: e.target.value })}
+                        className="w-full border rounded px-3 py-2 h-24"
+                        placeholder="- User is logged in\n- Redirected to dashboard"
+                      />
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Priority</label>
+                      <select
+                        value={formData.priority}
+                        onChange={(e) =>
+                          setFormData({ ...formData, priority: e.target.value as TestCaseFormData["priority"] })
+                        }
+                        className="w-full border rounded px-3 py-2"
+                      >
+                        <option value="P1">P1 - Critical</option>
+                        <option value="P2">P2 - High</option>
+                        <option value="P3">P3 - Medium</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Test Suite</label>
+                      <input
+                        type="text"
+                        value={formData.suite}
+                        onChange={(e) => setFormData({ ...formData, suite: e.target.value })}
+                        className="w-full border rounded px-3 py-2"
+                        placeholder="e.g., Authentication"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Component</label>
+                      <input
+                        type="text"
+                        value={formData.component}
+                        onChange={(e) => setFormData({ ...formData, component: e.target.value })}
+                        className="w-full border rounded px-3 py-2"
+                        placeholder="e.g., Login, Checkout"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Environment</label>
+                      <input
+                        type="text"
+                        value={formData.env}
+                        onChange={(e) => setFormData({ ...formData, env: e.target.value })}
+                        className="w-full border rounded px-3 py-2"
+                        placeholder="e.g., dev, staging, prod"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Preconditions</label>
+                    {!useAdvancedMode ? (
+                      <div className="space-y-2">
+                        {preconditionsList.map((precondition, index) => (
+                          <div key={index} className="flex gap-2">
+                            <span className="text-sm text-gray-500 pt-2 w-8">-</span>
+                            <input
+                              type="text"
+                              value={precondition}
+                              onChange={(e) => {
+                                const updated = [...preconditionsList];
+                                updated[index] = e.target.value;
+                                setPreconditionsList(updated);
+                              }}
+                              className="flex-1 border rounded px-3 py-2"
+                              placeholder={`Precondition ${index + 1}`}
+                            />
+                            {preconditionsList.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = preconditionsList.filter((_, i) => i !== index);
+                                  setPreconditionsList(updated.length ? updated : [""]);
+                                }}
+                                className="px-3 py-2 text-red-600 hover:bg-red-50 rounded"
+                                title="Remove precondition"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setPreconditionsList([...preconditionsList, ""])}
+                          className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                        >
+                          + Add Precondition
+                        </button>
+                      </div>
+                    ) : (
+                      <textarea
+                        value={formData.preconditions}
+                        onChange={(e) => setFormData({ ...formData, preconditions: e.target.value })}
+                        className="w-full border rounded px-3 py-2 h-20"
+                        placeholder="Setup requirements or prerequisites"
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Test Data</label>
+                    <textarea
+                      value={formData.data}
+                      onChange={(e) => setFormData({ ...formData, data: e.target.value })}
+                      className="w-full border rounded px-3 py-2 h-20"
+                      placeholder="Test data notes or references"
+                    />
+                  </div>
+                </div>
               ) : (
                 <div className="space-y-4">
                   {(() => {
