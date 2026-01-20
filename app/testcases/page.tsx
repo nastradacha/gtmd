@@ -211,6 +211,59 @@ export default function TestCasesPage() {
     return lines.every((line) => /^[-*][ \t]+/.test(line));
   };
 
+  const extractCustomBodySections = (body: string): string => {
+    const standardSections = new Set([
+      "story reference",
+      "preconditions",
+      "test data",
+      "test steps",
+      "expected results",
+      "metadata",
+    ]);
+
+    const blocks: Array<{ header: string | null; lines: string[] }> = [];
+    let currentHeader: string | null = null;
+    let currentLines: string[] = [];
+
+    const pushBlock = () => {
+      blocks.push({ header: currentHeader, lines: currentLines });
+    };
+
+    for (const line of body.split(/\r?\n/)) {
+      const m = line.match(/^##\s+(.+?)\s*$/);
+      if (m) {
+        pushBlock();
+        currentHeader = m[1];
+        currentLines = [line];
+        continue;
+      }
+      currentLines.push(line);
+    }
+    pushBlock();
+
+    const kept: string[] = [];
+    for (const block of blocks) {
+      const headerNorm = (block.header || "").trim().toLowerCase();
+      if (block.header && standardSections.has(headerNorm)) continue;
+
+      const lines = [...block.lines];
+      if (!block.header) {
+        const firstNonEmpty = lines.findIndex((l) => l.trim() !== "");
+        if (firstNonEmpty !== -1 && /^#\s+/.test(lines[firstNonEmpty].trim())) {
+          lines.splice(firstNonEmpty, 1);
+          if (lines[firstNonEmpty] !== undefined && lines[firstNonEmpty].trim() === "") {
+            lines.splice(firstNonEmpty, 1);
+          }
+        }
+      }
+
+      const text = lines.join("\n").trim();
+      if (text) kept.push(text);
+    }
+
+    return kept.join("\n\n").trim();
+  };
+
   const beginEdit = () => {
     if (!content || !selectedFile) return;
 
@@ -615,7 +668,11 @@ export default function TestCasesPage() {
       if (component) bodyParts.push(`- **Component**: ${component}`);
       if (env) bodyParts.push(`- **Environment**: ${env}`);
 
-      const nextContent = `${fmLines.join("\n")}\n\n${bodyParts.join("\n")}\n`;
+      const originalBody = content ? parseFrontmatter(content).body : "";
+      const preservedBody = extractCustomBodySections(originalBody);
+      const combinedBody = preservedBody ? `${bodyParts.join("\n")}\n\n${preservedBody}` : bodyParts.join("\n");
+
+      const nextContent = `${fmLines.join("\n")}\n\n${combinedBody}\n`;
 
       const res = await fetch("/api/github/testcases/update", {
         method: "POST",
